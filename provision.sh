@@ -25,23 +25,27 @@ STOAT_TAG="main"
 echo "=== EVLBOX Gaming Community in a Box — Provisioning ==="
 
 # -----------------------------------------------------------------------------
-# 0. Immediate login banner — in case customer SSH's in during provisioning
+# 0. Immediate login banner — in case customer SSH's in during provisioning.
+#    Uses evlbox-00-stack.sh which loads AFTER core's evlbox.sh (alphabetical).
+#    Sets EVLBOX_MOTD_SHOWN=1 early so core's banner is suppressed.
 # -----------------------------------------------------------------------------
-cat > /etc/profile.d/evlbox.sh << 'PROFILE'
+cat > /etc/profile.d/evlbox-00-stack.sh << 'PROFILE'
 #!/usr/bin/env bash
-if [ -n "$PS1" ]; then
+export EVLBOX_MOTD_SHOWN=1
+if [ -t 1 ]; then
+    C='\033[0;36m'
+    B='\033[1m'
+    D='\033[2m'
+    N='\033[0m'
     echo ""
-    echo "  ╔═══════════════════════════════════════════════════════════════╗"
-    echo "  ║            EVLBOX — Gaming Community in a Box                ║"
-    echo "  ║                                                              ║"
-    echo "  ║  Your server is still being set up. This takes 2-5 minutes.  ║"
-    echo "  ║                                                              ║"
-    echo "  ║  Wait a moment, then reconnect or run:                       ║"
-    echo "  ║                                                              ║"
-    echo "  ║    evlbox status                                             ║"
-    echo "  ║                                                              ║"
-    echo "  ║  Documentation: https://evlbox.com/docs                      ║"
-    echo "  ╚═══════════════════════════════════════════════════════════════╝"
+    echo -e "${C}${B}  ╔═══════════════════════════════════════════════════════════════╗${N}"
+    echo -e "${C}${B}  ║            EVLBOX — Gaming Community in a Box                ║${N}"
+    echo -e "${C}${B}  ╚═══════════════════════════════════════════════════════════════╝${N}"
+    echo ""
+    echo -e "  ${D}Server is still being set up. This takes 2-5 minutes.${N}"
+    echo -e "  ${D}Wait a moment, then reconnect or run:${N}  evlbox status"
+    echo ""
+    echo -e "  ${D}Docs:${N} https://evlbox.com/docs"
     echo ""
 fi
 PROFILE
@@ -85,24 +89,26 @@ echo "[6/6] Opening Mumble port..."
 ufw allow 64738 comment "Mumble voice chat"
 
 # -----------------------------------------------------------------------------
-# 6. Stack-specific login banner (replaces core's generic one)
+# 6. Stack-specific login banner (ready for setup version)
 # -----------------------------------------------------------------------------
-cat > /etc/profile.d/evlbox.sh << 'PROFILE'
+cat > /etc/profile.d/evlbox-00-stack.sh << 'PROFILE'
 #!/usr/bin/env bash
-# EVLBOX login banner — Gaming Community in a Box
-if [ -n "$PS1" ]; then
+export EVLBOX_MOTD_SHOWN=1
+if [ -t 1 ]; then
+    C='\033[0;36m'
+    B='\033[1m'
+    D='\033[2m'
+    N='\033[0m'
     echo ""
-    echo "  ╔═══════════════════════════════════════════════════════════════╗"
-    echo "  ║            EVLBOX — Gaming Community in a Box                ║"
-    echo "  ║                                                              ║"
-    echo "  ║  Your server is provisioned and ready for setup!             ║"
-    echo "  ║                                                              ║"
-    echo "  ║  Run the setup wizard to get started:                        ║"
-    echo "  ║                                                              ║"
-    echo "  ║    evlbox setup                                              ║"
-    echo "  ║                                                              ║"
-    echo "  ║  Documentation: https://evlbox.com/docs                      ║"
-    echo "  ╚═══════════════════════════════════════════════════════════════╝"
+    echo -e "${C}${B}  ╔═══════════════════════════════════════════════════════════════╗${N}"
+    echo -e "${C}${B}  ║            EVLBOX — Gaming Community in a Box                ║${N}"
+    echo -e "${C}${B}  ╚═══════════════════════════════════════════════════════════════╝${N}"
+    echo ""
+    echo -e "  ${D}Get started:${N}   evlbox setup"
+    echo -e "  ${D}Check status:${N}  evlbox status"
+    echo -e "  ${D}View help:${N}     evlbox help"
+    echo ""
+    echo -e "  ${D}Docs:${N} https://evlbox.com/docs"
     echo ""
 fi
 PROFILE
