@@ -25,6 +25,28 @@ STOAT_TAG="main"
 echo "=== EVLBOX Gaming Community in a Box — Provisioning ==="
 
 # -----------------------------------------------------------------------------
+# 0. Immediate login banner — in case customer SSH's in during provisioning
+# -----------------------------------------------------------------------------
+cat > /etc/profile.d/evlbox.sh << 'PROFILE'
+#!/usr/bin/env bash
+if [ -n "$PS1" ]; then
+    echo ""
+    echo "  ╔═══════════════════════════════════════════════════════════════╗"
+    echo "  ║            EVLBOX — Gaming Community in a Box                ║"
+    echo "  ║                                                              ║"
+    echo "  ║  Your server is still being set up. This takes 2-5 minutes.  ║"
+    echo "  ║                                                              ║"
+    echo "  ║  Wait a moment, then reconnect or run:                       ║"
+    echo "  ║                                                              ║"
+    echo "  ║    evlbox status                                             ║"
+    echo "  ║                                                              ║"
+    echo "  ║  Documentation: https://evlbox.com/docs                      ║"
+    echo "  ╚═══════════════════════════════════════════════════════════════╝"
+    echo ""
+fi
+PROFILE
+
+# -----------------------------------------------------------------------------
 # 1. Bootstrap — just enough to run evlbox-core's installer
 # -----------------------------------------------------------------------------
 echo "[1/6] Bootstrapping base packages..."

@@ -197,11 +197,10 @@ TERM=ansi
 export TERM
 
 whiptail --title "EVLBOX — Gaming Community in a Box" --msgbox \
-"Welcome to the Gaming Community in a Box setup wizard!\n\n\
-This will configure your self-hosted gaming community.\n\
-Stoat (Discord-like chat) is the core service.\n\
-You'll choose which optional services to enable.\n\n\
-Press OK to begin." 14 60
+"Welcome! This wizard will set up your gaming community server.\n\n\
+You'll pick which services to run, configure your domain,\n\
+and everything will be up and running in a few minutes.\n\n\
+Includes: Stoat chat, forums, voice, image hosting, and more." 12 65
 
 # =============================================================================
 # SERVICE SELECTION (before domain, so we know what needs URLs)
@@ -547,7 +546,7 @@ if [ -d "$STOAT_DIR" ]; then
     cd "$STOAT_DIR"
     # Run Stoat's own config generator with our domain
     if [ -f "$STOAT_DIR/generate_config.sh" ]; then
-        bash "$STOAT_DIR/generate_config.sh" <<< "$DOMAIN"
+        bash "$STOAT_DIR/generate_config.sh" "$DOMAIN"
     fi
 else
     echo "WARNING: Stoat directory not found at $STOAT_DIR"
