@@ -599,14 +599,19 @@ CREDS_FILE="/root/evlbox-credentials.txt"
 chmod 600 "$CREDS_FILE"
 
 # ---- Start services ----
-whiptail --title "Starting Services" --infobox \
-"Starting your gaming community services...\n\nThis may take a minute on first boot." 8 60
+echo ""
+echo "Starting services... this may take a few minutes on first boot."
+echo ""
 
+echo "  Starting Stoat chat platform..."
 cd "$STOAT_DIR"
-docker compose up -d
+docker compose up -d --quiet-pull 2>&1 | tail -1
 
+echo "  Starting stack services..."
 cd "$STACK_DIR"
-docker compose up -d
+docker compose up -d --quiet-pull 2>&1 | tail -1
+
+echo ""
 
 # ---- Build summary ----
 SUMMARY="Your Gaming Community in a Box is running!\n\n"
