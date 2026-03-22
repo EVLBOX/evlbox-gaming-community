@@ -1,0 +1,149 @@
+# Gaming Community in a Box — Docker Compose Stack
+# https://github.com/EVLBOX/evlbox-gaming-community
+#
+# Stoat (chat) runs as a separate compose project in /opt/evlbox/stoat.
+# Optional services use Docker Compose profiles — toggle via COMPOSE_PROFILES in .env.
+#
+# Profiles: forum, blog, screenshots, paste, voice
+# Default: all enabled. Use setup.sh or `evlbox enable/disable <service>` to toggle.
+
+services:
+  # ===========================================================================
+  # REVERSE PROXY (always on)
+  # ===========================================================================
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./templates/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN}
+    networks:
+      - default
+      - evlbox
+
+  # ===========================================================================
+  # MUMBLE — Voice Chat (profile: voice)
+  # ===========================================================================
+  mumble:
+    image: mumblevoip/mumble-server:latest
+    restart: unless-stopped
+    profiles: ["voice"]
+    ports:
+      - "64738:64738"
+      - "64738:64738/udp"
+    volumes:
+      - mumble_data:/data
+    environment:
+      - MUMBLE_SUPERUSER_PASSWORD=${MUMBLE_SUPERUSER_PASSWORD}
+
+  # ===========================================================================
+  # FLARUM — Forum (profile: forum)
+  # ===========================================================================
+  flarum:
+    image: crazymax/flarum:latest
+    restart: unless-stopped
+    profiles: ["forum"]
+    volumes:
+      - flarum_data:/data
+    environment:
+      - DB_HOST=mariadb
+      - DB_NAME=${FLARUM_DB_NAME}
+      - DB_USER=${FLARUM_DB_USER}
+      - DB_PASSWORD=${FLARUM_DB_PASSWORD}
+      - FLARUM_BASE_URL=https://forum.${DOMAIN}
+      - FLARUM_FORUM_TITLE=Gaming Community
+    depends_on:
+      - mariadb
+
+  # ===========================================================================
+  # GHOST — Community Blog (profile: blog)
+  # ===========================================================================
+  ghost:
+    image: ghost:5-alpine
+    restart: unless-stopped
+    profiles: ["blog"]
+    volumes:
+      - ghost_data:/var/lib/ghost/content
+    environment:
+      - url=https://blog.${DOMAIN}
+      - database__client=mysql
+      - database__connection__host=mariadb
+      - database__connection__database=${GHOST_DB_NAME}
+      - database__connection__user=${GHOST_DB_USER}
+      - database__connection__password=${GHOST_DB_PASSWORD}
+    depends_on:
+      - mariadb
+
+  # ===========================================================================
+  # ZIPLINE — Image / Screenshot Hosting (profile: screenshots)
+  # ===========================================================================
+  zipline:
+    image: ghcr.io/diced/zipline:latest
+    restart: unless-stopped
+    profiles: ["screenshots"]
+    volumes:
+      - zipline_data:/zipline/uploads
+      - zipline_db:/zipline/data
+    environment:
+      - CORE_SECRET=${ZIPLINE_CORE_SECRET}
+      - CORE_HOST=0.0.0.0
+      - CORE_PORT=3000
+      - DATASOURCE_TYPE=local
+      - DATASOURCE_LOCAL_DIRECTORY=/zipline/uploads
+
+  # ===========================================================================
+  # PRIVATEBIN — Paste Service (profile: paste)
+  # ===========================================================================
+  privatebin:
+    image: privatebin/nginx-fpm-alpine:latest
+    restart: unless-stopped
+    profiles: ["paste"]
+    volumes:
+      - privatebin_data:/srv/data
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+
+  # ===========================================================================
+  # MARIADB — Shared Database (profile: mariadb)
+  # Started automatically when forum or blog is enabled.
+  # ===========================================================================
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    profiles: ["forum", "blog"]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./templates/initdb:/docker-entrypoint-initdb.d:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  evlbox:
+    name: evlbox
+    external: true
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  caddy_data:
+  caddy_config:
+  mumble_data:
+  flarum_data:
+  ghost_data:
+  zipline_data:
+  zipline_db:
+  privatebin_data:
+  mariadb_data:

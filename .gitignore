@@ -1,0 +1,21 @@
+# Environment and secrets
+.env
+secrets.env
+*.key
+*.pem
+
+# AI context (not for public repo)
+CLAUDE.md
+claude.md
+.claude/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
