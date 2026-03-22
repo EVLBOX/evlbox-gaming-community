@@ -13,11 +13,7 @@
 # }
 #
 # chat.myguild.com {
-# 	reverse_proxy web:5000
-# }
-#
-# api.myguild.com {
-# 	reverse_proxy api:14702
+# 	reverse_proxy stoat-caddy:80
 # }
 #
 # forum.myguild.com {

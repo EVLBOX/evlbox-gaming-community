@@ -13,7 +13,6 @@ Part of [EVLBOX Stacks](https://evlbox.com) — pre-configured, self-hosted serv
 | Service | Purpose | URL |
 |---|---|---|
 | [Stoat](https://github.com/stoatchat/self-hosted) | Discord-like chat | `chat.yourdomain.com` |
-| Stoat API | Chat backend (required by Stoat) | `api.yourdomain.com` (always reserved) |
 | [Caddy](https://caddyserver.com/) | Reverse proxy + auto HTTPS | — |
 
 **Optional (choose during setup):**
@@ -84,15 +83,13 @@ Backups protect against app-level mistakes. They do **not** protect against disk
 
 The setup wizard offers three domain configurations:
 
-- **Express** (recommended) — enter your domain, subdomains are auto-assigned (`chat.`, `forum.`, `img.`, `paste.`, `api.`)
+- **Express** (recommended) — enter your domain, subdomains are auto-assigned (`chat.`, `forum.`, `img.`, `paste.`)
 - **Custom** — pick your own URLs per service (some apps require subdomains, some support subpaths)
 - **IP-only** — no domain needed, only Stoat runs with self-signed TLS. Add a domain later with `evlbox setup`
 
-> **Note:** `api.yourdomain.com` is always reserved by Stoat's backend and cannot be reassigned to another service.
-
 ## Architecture
 
-Stoat runs as its own Docker Compose project (`/opt/evlbox/stoat`) with MongoDB, KeyDB, RabbitMQ, and MinIO. Optional services run in a second Compose project (`/opt/evlbox/stack`) using [Docker Compose profiles](https://docs.docker.com/compose/profiles/). Caddy sits in the stack project and routes to both. The `.compose-projects` file tells the `evlbox` CLI about Stoat so `evlbox status/update/restart` manages both projects.
+Two Docker Compose projects: Stoat (`/opt/evlbox/stoat`) runs its own full stack with an internal Caddy for path routing. Optional services run in a second project (`/opt/evlbox/stack`) using [Docker Compose profiles](https://docs.docker.com/compose/profiles/). Our Caddy sits in the stack project, terminates TLS, and proxies to Stoat's internal Caddy and the other services. The `.compose-projects` file tells the `evlbox` CLI about Stoat so `evlbox status/update/restart` manages both projects.
 
 ## License
 

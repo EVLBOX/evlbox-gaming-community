@@ -68,11 +68,11 @@ HEADER
 
 :443 {
 	tls internal
-	reverse_proxy web:5000
+	reverse_proxy stoat-caddy:80
 }
 
 :80 {
-	reverse_proxy web:5000
+	reverse_proxy stoat-caddy:80
 }
 EOF
         return
@@ -93,7 +93,7 @@ EOF
             cat >> "$caddyfile" << EOF
 
 ${ROOT_URL} {
-	reverse_proxy web:5000
+	reverse_proxy stoat-caddy:80
 }
 EOF
         fi
@@ -104,38 +104,10 @@ EOF
         cat >> "$caddyfile" << EOF
 
 ${STOAT_URL} {
-	reverse_proxy web:5000
+	reverse_proxy stoat-caddy:80
 }
 EOF
     fi
-
-    # Stoat API + supporting services (events, autumn, january, gifbox, livekit)
-    cat >> "$caddyfile" << EOF
-
-api.${DOMAIN} {
-	route /ws {
-		uri strip_prefix /ws
-		reverse_proxy events:14703
-	}
-	route /autumn* {
-		uri strip_prefix /autumn
-		reverse_proxy autumn:14704
-	}
-	route /january* {
-		uri strip_prefix /january
-		reverse_proxy january:14705
-	}
-	route /gifbox* {
-		uri strip_prefix /gifbox
-		reverse_proxy gifbox:14706
-	}
-	route /livekit* {
-		uri strip_prefix /livekit
-		reverse_proxy livekit:7880
-	}
-	reverse_proxy api:14702
-}
-EOF
 
     # --- Forum (Flarum) — supports subdomain or subpath ---
     if has_profile "forum"; then
@@ -331,7 +303,6 @@ if [ "$IP_ONLY" = false ]; then
         DNS_MSG="Create these DNS records pointing to ${SERVER_IP}:\n\n"
         DNS_MSG+="  A  ${DOMAIN}  →  ${SERVER_IP}\n"
         DNS_MSG+="  A  chat.${DOMAIN}  →  ${SERVER_IP}\n"
-        DNS_MSG+="  A  api.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "forum"        && DNS_MSG+="  A  forum.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "screenshots"  && DNS_MSG+="  A  img.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "paste"        && DNS_MSG+="  A  paste.${DOMAIN}  →  ${SERVER_IP}\n"
@@ -345,7 +316,7 @@ if [ "$IP_ONLY" = false ]; then
     # --- Custom mode ---
     elif [ "$ROUTING_MODE" = "custom" ]; then
         DOMAIN=$(whiptail --title "Base Domain" --inputbox \
-"Enter your base domain (used for SSL and Stoat API):" 10 60 "" 3>&1 1>&2 2>&3) || true
+"Enter your base domain (used for SSL and routing):" 10 60 "" 3>&1 1>&2 2>&3) || true
 
         if [ -z "$DOMAIN" ]; then
             whiptail --title "Error" --msgbox "Domain cannot be empty." 8 40
@@ -413,7 +384,6 @@ Examples: paste.${DOMAIN} or ${DOMAIN}/paste" 12 60 "paste.${DOMAIN}" 3>&1 1>&2 
         declare -A dns_hosts
         dns_hosts["$DOMAIN"]=1
         dns_hosts["${STOAT_URL}"]=1
-        dns_hosts["api.${DOMAIN}"]=1
         [ -n "$FORUM_URL" ] && dns_hosts["${FORUM_URL%%/*}"]=1
         [ -n "$GHOST_URL" ] && dns_hosts["${GHOST_URL}"]=1
         [ -n "$ZIPLINE_URL" ] && dns_hosts["${ZIPLINE_URL}"]=1
@@ -572,34 +542,11 @@ if [ -d "$STOAT_DIR" ]; then
     fi
 
     # Replace Stoat's generated compose.override.yml with ours.
-    # Stoat's script already configured the app for "behind a proxy" mode
-    # (Revolt.toml, .env.web, etc.). We just need to swap the override
-    # to use our shared evlbox network instead of their port 8880 mapping.
+    # Stoat's own Caddy handles all internal path routing (/api, /ws, /autumn, etc.)
+    # Our override just puts their Caddy on the shared evlbox network so our Caddy
+    # can proxy to it. No .env.web or Revolt.toml patching needed — the generator's
+    # "behind a proxy" output is correct as-is.
     cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
-
-    # Patch Stoat's .env.web to use our subdomain-based routing.
-    # Their generator writes path-based URLs (e.g., DOMAIN/api) for "behind a proxy" mode,
-    # but we route via subdomains (api.DOMAIN) through our Caddy.
-    if [ -f "$STOAT_DIR/.env.web" ] && [ "$IP_ONLY" = false ]; then
-        cat > "$STOAT_DIR/.env.web" << ENVWEB
-REVOLT_PUBLIC_URL=https://${STOAT_URL}
-VITE_API_URL=https://api.${DOMAIN}
-VITE_WS_URL=wss://api.${DOMAIN}/ws
-VITE_MEDIA_URL=https://api.${DOMAIN}/autumn
-VITE_PROXY_URL=https://api.${DOMAIN}/january
-VITE_CFG_ENABLE_VIDEO=1
-HOSTNAME=0.0.0.0
-ENVWEB
-    fi
-
-    # Also patch Revolt.toml hosts section to match our routing
-    if [ -f "$STOAT_DIR/Revolt.toml" ] && [ "$IP_ONLY" = false ]; then
-        sed -i "s|app = \"https://.*\"|app = \"https://${STOAT_URL}\"|" "$STOAT_DIR/Revolt.toml"
-        sed -i "s|api = \"https://.*\"|api = \"https://api.${DOMAIN}\"|" "$STOAT_DIR/Revolt.toml"
-        sed -i "s|events = \"wss://.*\"|events = \"wss://api.${DOMAIN}/ws\"|" "$STOAT_DIR/Revolt.toml"
-        sed -i "s|autumn = \"https://.*\"|autumn = \"https://api.${DOMAIN}/autumn\"|" "$STOAT_DIR/Revolt.toml"
-        sed -i "s|january = \"https://.*\"|january = \"https://api.${DOMAIN}/january\"|" "$STOAT_DIR/Revolt.toml"
-    fi
 else
     echo "WARNING: Stoat directory not found at $STOAT_DIR"
     echo "Stoat should have been cloned during provisioning."

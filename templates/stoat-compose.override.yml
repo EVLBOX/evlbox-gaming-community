@@ -1,35 +1,18 @@
 # Override for Stoat self-hosted compose.
-# Drops Stoat's Caddy (our stack Caddy handles all routing) and exposes
-# key services on the shared evlbox network.
+# Exposes Stoat's Caddy on the shared evlbox network so our stack Caddy
+# can reverse proxy to it. Stoat's Caddy handles all internal path routing
+# (/api, /ws, /autumn, /january, etc.) — we don't touch any of that.
 # Copied to /opt/evlbox/stoat/compose.override.yml by setup.sh
 
 services:
-  # Disable Stoat's built-in Caddy — our Caddy handles ports 80/443
   caddy:
-    entrypoint: ["true"]
-    restart: "no"
-    ports: []
-
-  # Expose services on the shared network so our Caddy can reach them
-  web:
+    environment:
+      - HOSTNAME=:80
     networks:
-      - default
-      - evlbox
-
-  api:
-    networks:
-      - default
-      - evlbox
-
-  autumn:
-    networks:
-      - default
-      - evlbox
-
-  january:
-    networks:
-      - default
-      - evlbox
+      default: {}
+      evlbox:
+        aliases:
+          - stoat-caddy
 
 networks:
   evlbox:
