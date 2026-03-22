@@ -57,7 +57,7 @@ services:
       - DB_NAME=${FLARUM_DB_NAME}
       - DB_USER=${FLARUM_DB_USER}
       - DB_PASSWORD=${FLARUM_DB_PASSWORD}
-      - FLARUM_BASE_URL=https://forum.${DOMAIN}
+      - FLARUM_BASE_URL=${FLARUM_BASE_URL}
       - FLARUM_FORUM_TITLE=Gaming Community
     depends_on:
       - mariadb
@@ -72,7 +72,7 @@ services:
     volumes:
       - ghost_data:/var/lib/ghost/content
     environment:
-      - url=https://blog.${DOMAIN}
+      - url=https://${GHOST_URL}
       - database__client=mysql
       - database__connection__host=mariadb
       - database__connection__database=${GHOST_DB_NAME}

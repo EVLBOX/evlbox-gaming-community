@@ -17,8 +17,9 @@ STACK_DIR="/opt/evlbox/stack"
 STOAT_DIR="/opt/evlbox/stoat"
 
 # Pinned versions — bump these when cutting a release
-EVLBOX_CORE_TAG="v1.0.0"
-STACK_TAG="v1.0.0"
+# TODO: change back to tagged versions (e.g., v1.0.0) before production release
+EVLBOX_CORE_TAG="main"
+STACK_TAG="main"
 STOAT_TAG="main"
 
 echo "=== EVLBOX Gaming Community in a Box — Provisioning ==="
