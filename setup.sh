@@ -540,14 +540,20 @@ if [ -d "$STOAT_DIR" ]; then
     # Create shared Docker network for cross-compose communication
     docker network create evlbox 2>/dev/null || true
 
-    # Copy our override to disable Stoat's built-in Caddy
-    cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
-
     cd "$STOAT_DIR"
-    # Run Stoat's own config generator with our domain
+
+    # Run Stoat's config generator non-interactively:
+    #   - "y" = yes, behind another reverse proxy (our Caddy)
+    #   - "y" = yes, enable camera/screen sharing
     if [ -f "$STOAT_DIR/generate_config.sh" ]; then
-        bash "$STOAT_DIR/generate_config.sh" "$DOMAIN"
+        printf 'y\ny\n' | bash "$STOAT_DIR/generate_config.sh" "$DOMAIN"
     fi
+
+    # Replace Stoat's generated compose.override.yml with ours.
+    # Stoat's script already configured the app for "behind a proxy" mode
+    # (Revolt.toml, .env.web, etc.). We just need to swap the override
+    # to use our shared evlbox network instead of their port 8880 mapping.
+    cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
 else
     echo "WARNING: Stoat directory not found at $STOAT_DIR"
     echo "Stoat should have been cloned during provisioning."
