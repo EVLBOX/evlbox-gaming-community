@@ -1,0 +1,43 @@
+a.condovault.org {
+	reverse_proxy ghost:2368
+}
+
+chat.a.condovault.org {
+	reverse_proxy web:5000
+}
+
+api.a.condovault.org {
+	route /ws {
+		uri strip_prefix /ws
+		reverse_proxy events:14703
+	}
+	route /autumn* {
+		uri strip_prefix /autumn
+		reverse_proxy autumn:14704
+	}
+	route /january* {
+		uri strip_prefix /january
+		reverse_proxy january:14705
+	}
+	route /gifbox* {
+		uri strip_prefix /gifbox
+		reverse_proxy gifbox:14706
+	}
+	route /livekit* {
+		uri strip_prefix /livekit
+		reverse_proxy livekit:7880
+	}
+	reverse_proxy api:14702
+}
+
+forum.a.condovault.org {
+	reverse_proxy flarum:8888
+}
+
+img.a.condovault.org {
+	reverse_proxy zipline:3000
+}
+
+paste.a.condovault.org {
+	reverse_proxy privatebin:8080
+}

@@ -109,15 +109,29 @@ ${STOAT_URL} {
 EOF
     fi
 
-    # Stoat API + file server (autumn) + link previews (january)
+    # Stoat API + supporting services (events, autumn, january, gifbox, livekit)
     cat >> "$caddyfile" << EOF
 
 api.${DOMAIN} {
-	handle_path /autumn* {
-		reverse_proxy autumn:3000
+	route /ws {
+		uri strip_prefix /ws
+		reverse_proxy events:14703
 	}
-	handle_path /january* {
-		reverse_proxy january:7000
+	route /autumn* {
+		uri strip_prefix /autumn
+		reverse_proxy autumn:14704
+	}
+	route /january* {
+		uri strip_prefix /january
+		reverse_proxy january:14705
+	}
+	route /gifbox* {
+		uri strip_prefix /gifbox
+		reverse_proxy gifbox:14706
+	}
+	route /livekit* {
+		uri strip_prefix /livekit
+		reverse_proxy livekit:7880
 	}
 	reverse_proxy api:14702
 }
@@ -570,7 +584,7 @@ if [ -d "$STOAT_DIR" ]; then
         cat > "$STOAT_DIR/.env.web" << ENVWEB
 REVOLT_PUBLIC_URL=https://${STOAT_URL}
 VITE_API_URL=https://api.${DOMAIN}
-VITE_WS_URL=wss://api.${DOMAIN}
+VITE_WS_URL=wss://api.${DOMAIN}/ws
 VITE_MEDIA_URL=https://api.${DOMAIN}/autumn
 VITE_PROXY_URL=https://api.${DOMAIN}/january
 VITE_CFG_ENABLE_VIDEO=1
@@ -582,7 +596,7 @@ ENVWEB
     if [ -f "$STOAT_DIR/Revolt.toml" ] && [ "$IP_ONLY" = false ]; then
         sed -i "s|app = \"https://.*\"|app = \"https://${STOAT_URL}\"|" "$STOAT_DIR/Revolt.toml"
         sed -i "s|api = \"https://.*\"|api = \"https://api.${DOMAIN}\"|" "$STOAT_DIR/Revolt.toml"
-        sed -i "s|events = \"wss://.*\"|events = \"wss://api.${DOMAIN}\"|" "$STOAT_DIR/Revolt.toml"
+        sed -i "s|events = \"wss://.*\"|events = \"wss://api.${DOMAIN}/ws\"|" "$STOAT_DIR/Revolt.toml"
         sed -i "s|autumn = \"https://.*\"|autumn = \"https://api.${DOMAIN}/autumn\"|" "$STOAT_DIR/Revolt.toml"
         sed -i "s|january = \"https://.*\"|january = \"https://api.${DOMAIN}/january\"|" "$STOAT_DIR/Revolt.toml"
     fi
