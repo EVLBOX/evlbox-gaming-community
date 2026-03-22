@@ -90,13 +90,26 @@ services:
     profiles: ["screenshots"]
     volumes:
       - zipline_data:/zipline/uploads
-      - zipline_db:/zipline/data
     environment:
       - CORE_SECRET=${ZIPLINE_CORE_SECRET}
-      - CORE_HOST=0.0.0.0
+      - CORE_HOSTNAME=0.0.0.0
       - CORE_PORT=3000
       - DATASOURCE_TYPE=local
       - DATASOURCE_LOCAL_DIRECTORY=/zipline/uploads
+      - DATABASE_URL=postgresql://zipline:${ZIPLINE_DB_PASSWORD}@zipline-db:5432/zipline
+    depends_on:
+      - zipline-db
+
+  zipline-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles: ["screenshots"]
+    volumes:
+      - zipline_db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=zipline
+      - POSTGRES_PASSWORD=${ZIPLINE_DB_PASSWORD}
+      - POSTGRES_DB=zipline
 
   # ===========================================================================
   # PRIVATEBIN — Paste Service (profile: paste)
@@ -107,7 +120,6 @@ services:
     profiles: ["paste"]
     volumes:
       - privatebin_data:/srv/data
-    read_only: true
     tmpfs:
       - /tmp
       - /run
@@ -144,6 +156,6 @@ volumes:
   flarum_data:
   ghost_data:
   zipline_data:
-  zipline_db:
+  zipline_db:   # PostgreSQL data for Zipline
   privatebin_data:
   mariadb_data:

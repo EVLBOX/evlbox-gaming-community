@@ -91,7 +91,10 @@ fi
 
 if has_profile "screenshots"; then
     backup_volume "zipline_data" "zipline_uploads"
-    backup_volume "zipline_db" "zipline_db"
+    next_step "Dumping Zipline PostgreSQL..."
+    docker compose -f "$STACK_DIR/compose.yml" exec -T zipline-db \
+        pg_dump -U zipline zipline \
+        > "$BACKUP_PATH/zipline-postgres.sql"
 fi
 
 if has_profile "paste"; then

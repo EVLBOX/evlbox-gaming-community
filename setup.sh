@@ -109,10 +109,16 @@ ${STOAT_URL} {
 EOF
     fi
 
-    # Stoat API
+    # Stoat API + file server (autumn) + link previews (january)
     cat >> "$caddyfile" << EOF
 
 api.${DOMAIN} {
+	handle_path /autumn* {
+		reverse_proxy autumn:3000
+	}
+	handle_path /january* {
+		reverse_proxy january:7000
+	}
 	reverse_proxy api:14702
 }
 EOF
@@ -433,6 +439,7 @@ FLARUM_DB_PW=$(generate_password)
 FLARUM_ADMIN_PW=$(generate_password)
 GHOST_DB_PW=$(generate_password)
 ZIPLINE_SECRET=$(generate_password)
+ZIPLINE_DB_PW=$(generate_password)
 MUMBLE_PW=$(generate_password)
 
 # Customize passwords for selected services
@@ -508,6 +515,7 @@ GHOST_DB_PASSWORD=${GHOST_DB_PW}
 
 # Zipline
 ZIPLINE_CORE_SECRET=${ZIPLINE_SECRET}
+ZIPLINE_DB_PASSWORD=${ZIPLINE_DB_PW}
 
 # Mumble
 MUMBLE_SUPERUSER_PASSWORD=${MUMBLE_PW}
@@ -554,6 +562,30 @@ if [ -d "$STOAT_DIR" ]; then
     # (Revolt.toml, .env.web, etc.). We just need to swap the override
     # to use our shared evlbox network instead of their port 8880 mapping.
     cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
+
+    # Patch Stoat's .env.web to use our subdomain-based routing.
+    # Their generator writes path-based URLs (e.g., DOMAIN/api) for "behind a proxy" mode,
+    # but we route via subdomains (api.DOMAIN) through our Caddy.
+    if [ -f "$STOAT_DIR/.env.web" ] && [ "$IP_ONLY" = false ]; then
+        cat > "$STOAT_DIR/.env.web" << ENVWEB
+REVOLT_PUBLIC_URL=https://${STOAT_URL}
+VITE_API_URL=https://api.${DOMAIN}
+VITE_WS_URL=wss://api.${DOMAIN}
+VITE_MEDIA_URL=https://api.${DOMAIN}/autumn
+VITE_PROXY_URL=https://api.${DOMAIN}/january
+VITE_CFG_ENABLE_VIDEO=1
+HOSTNAME=0.0.0.0
+ENVWEB
+    fi
+
+    # Also patch Revolt.toml hosts section to match our routing
+    if [ -f "$STOAT_DIR/Revolt.toml" ] && [ "$IP_ONLY" = false ]; then
+        sed -i "s|app = \"https://.*\"|app = \"https://${STOAT_URL}\"|" "$STOAT_DIR/Revolt.toml"
+        sed -i "s|api = \"https://.*\"|api = \"https://api.${DOMAIN}\"|" "$STOAT_DIR/Revolt.toml"
+        sed -i "s|events = \"wss://.*\"|events = \"wss://api.${DOMAIN}\"|" "$STOAT_DIR/Revolt.toml"
+        sed -i "s|autumn = \"https://.*\"|autumn = \"https://api.${DOMAIN}/autumn\"|" "$STOAT_DIR/Revolt.toml"
+        sed -i "s|january = \"https://.*\"|january = \"https://api.${DOMAIN}/january\"|" "$STOAT_DIR/Revolt.toml"
+    fi
 else
     echo "WARNING: Stoat directory not found at $STOAT_DIR"
     echo "Stoat should have been cloned during provisioning."
@@ -600,7 +632,8 @@ chmod 600 "$CREDS_FILE"
 
 # ---- Start services ----
 echo ""
-echo "Starting services... this may take a few minutes on first boot."
+echo "Starting services... hang tight, this may take a few minutes."
+echo "Do not close this terminal."
 echo ""
 
 echo "  Starting Stoat chat platform..."

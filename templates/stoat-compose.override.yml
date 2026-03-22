@@ -1,6 +1,6 @@
 # Override for Stoat self-hosted compose.
 # Drops Stoat's Caddy (our stack Caddy handles all routing) and exposes
-# the Stoat network so our Caddy can reach Stoat services.
+# key services on the shared evlbox network.
 # Copied to /opt/evlbox/stoat/compose.override.yml by setup.sh
 
 services:
@@ -10,13 +10,23 @@ services:
     restart: "no"
     ports: []
 
-  # Expose web + api on the shared network so our Caddy can reach them
+  # Expose services on the shared network so our Caddy can reach them
   web:
     networks:
       - default
       - evlbox
 
   api:
+    networks:
+      - default
+      - evlbox
+
+  autumn:
+    networks:
+      - default
+      - evlbox
+
+  january:
     networks:
       - default
       - evlbox
