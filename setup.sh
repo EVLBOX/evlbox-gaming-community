@@ -788,7 +788,7 @@ if [ "$RECONFIGURE" = false ] || is_new_profile "forum"; then
             "echo password_hash('${FLARUM_ADMIN_PW}', PASSWORD_BCRYPT);" 2>/dev/null) || true
         if [ -n "$FLARUM_HASH" ]; then
             docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
-                -e "UPDATE flarum.flarum_users SET username='admin', email='${ADMIN_EMAIL}', password_hash='${FLARUM_HASH}' WHERE id=1;" \
+                -e "UPDATE flarum.flarum_users SET username='admin', email='${ADMIN_EMAIL}', password='${FLARUM_HASH}' WHERE id=1;" \
                 >/dev/null 2>&1 || true
         fi
     fi
