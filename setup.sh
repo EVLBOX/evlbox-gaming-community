@@ -119,7 +119,7 @@ EOF
 
 ${forum_host} {
 	handle_path ${forum_path}* {
-		reverse_proxy flarum:8888
+		reverse_proxy flarum:8000
 	}
 }
 EOF
@@ -127,7 +127,7 @@ EOF
             cat >> "$caddyfile" << EOF
 
 ${FORUM_URL} {
-	reverse_proxy flarum:8888
+	reverse_proxy flarum:8000
 }
 EOF
         fi

@@ -17,7 +17,7 @@
 # }
 #
 # forum.myguild.com {
-# 	reverse_proxy flarum:8888
+# 	reverse_proxy flarum:8000
 # }
 #
 # img.myguild.com {
@@ -32,7 +32,7 @@
 #
 # myguild.com {
 # 	handle_path /forum* {
-# 		reverse_proxy flarum:8888
+# 		reverse_proxy flarum:8000
 # 	}
 # }
 #
