@@ -2,6 +2,7 @@
 # Gaming Community in a Box — Phase 2: Setup Wizard
 # Customer runs this on first SSH login (via `evlbox setup`).
 # TUI wizard (whiptail) collects config, picks optional services, and starts everything.
+# Safe to re-run: detects existing setup and offers reconfigure mode.
 
 set -euo pipefail
 
@@ -31,6 +32,14 @@ check_whiptail() {
 
 has_profile() {
     [[ ",$PROFILES," == *",$1,"* ]]
+}
+
+had_profile() {
+    [[ ",$OLD_PROFILES," == *",$1,"* ]]
+}
+
+is_new_profile() {
+    has_profile "$1" && ! had_profile "$1"
 }
 
 get_server_ip() {
@@ -188,23 +197,105 @@ cd "$STACK_DIR"
 TERM=ansi
 export TERM
 
-whiptail --title "EVLBOX — Gaming Community in a Box" --msgbox \
+# =============================================================================
+# DETECT FIRST RUN vs RECONFIGURE
+# =============================================================================
+RECONFIGURE=false
+FULL_RESET=false
+OLD_PROFILES=""
+OLD_DOMAIN=""
+
+if [ -f "$ENV_FILE" ]; then
+    # Existing install detected — load current values
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+
+    # Save old state for comparison
+    OLD_PROFILES="${COMPOSE_PROFILES:-}"
+    OLD_DOMAIN="${DOMAIN:-}"
+
+    # Preserve all existing passwords/secrets from sourced .env
+    OLD_MARIADB_ROOT_PW="${MARIADB_ROOT_PASSWORD:-}"
+    OLD_FLARUM_DB_PW="${FLARUM_DB_PASSWORD:-}"
+    OLD_FLARUM_ADMIN_PW="${FLARUM_ADMIN_PASSWORD:-}"
+    OLD_GHOST_DB_PW="${GHOST_DB_PASSWORD:-}"
+    OLD_BOOKSTACK_APP_KEY="${BOOKSTACK_APP_KEY:-}"
+    OLD_BOOKSTACK_DB_PW="${BOOKSTACK_DB_PASSWORD:-}"
+    OLD_MUMBLE_PW="${MUMBLE_SUPERUSER_PASSWORD:-}"
+
+    # Preserve existing URL defaults for pre-filling
+    OLD_STOAT_URL="${STOAT_URL:-}"
+    OLD_FORUM_URL="${FORUM_URL:-}"
+    OLD_GHOST_URL="${GHOST_URL:-}"
+    OLD_BOOKSTACK_URL="${BOOKSTACK_URL:-}"
+    OLD_PASTE_URL="${PASTE_URL:-}"
+    OLD_ROOT_URL="${ROOT_URL:-}"
+    OLD_ROOT_TARGET="${ROOT_TARGET:-stoat}"
+    OLD_ADMIN_EMAIL="${ADMIN_EMAIL:-}"
+
+    SETUP_MODE=$(whiptail --title "EVLBOX — Setup" --menu \
+"An existing setup was detected.\nWhat would you like to do?" 12 65 2 \
+"reconfigure" "Change services or domains" \
+"reset"       "Full reset (destroys all data)" \
+3>&1 1>&2 2>&3) || true
+
+    if [ "$SETUP_MODE" = "reconfigure" ]; then
+        RECONFIGURE=true
+    elif [ "$SETUP_MODE" = "reset" ]; then
+        CONFIRM=$(whiptail --title "⚠ FULL RESET — DATA LOSS" --inputbox \
+"This will DESTROY ALL DATA including:\n\
+  - Chat history and user accounts\n\
+  - Forum posts and threads\n\
+  - Wiki pages and content\n\
+  - Blog posts\n\
+  - All databases\n\n\
+This CANNOT be undone.\n\n\
+Type YES to confirm:" 18 65 "" 3>&1 1>&2 2>&3) || true
+
+        if [ "$CONFIRM" != "YES" ]; then
+            whiptail --title "Cancelled" --msgbox "Reset cancelled. Nothing was changed." 8 50
+            exit 0
+        fi
+        FULL_RESET=true
+    else
+        exit 0
+    fi
+fi
+
+# =============================================================================
+# WELCOME (first run and full reset only)
+# =============================================================================
+if [ "$RECONFIGURE" = false ]; then
+    whiptail --title "EVLBOX — Gaming Community in a Box" --msgbox \
 "Welcome! This wizard will set up your gaming community server.\n\n\
 You'll pick which services to run, configure your domain,\n\
 and everything will be up and running in a few minutes.\n\n\
-Includes: Stoat chat, forums, voice, image hosting, and more." 12 65
+Includes: Stoat chat, forums, voice, wiki, and more." 12 65
+fi
 
 # =============================================================================
-# SERVICE SELECTION (before domain, so we know what needs URLs)
+# SERVICE SELECTION
 # =============================================================================
+
+# Determine ON/OFF state for checklist based on existing profiles
+forum_state="ON"; voice_state="ON"; wiki_state="ON"; paste_state="ON"; blog_state="OFF"
+if [ "$RECONFIGURE" = true ]; then
+    forum_state="OFF"; voice_state="OFF"; wiki_state="OFF"; paste_state="OFF"; blog_state="OFF"
+    [[ ",$OLD_PROFILES," == *",forum,"* ]]  && forum_state="ON"
+    [[ ",$OLD_PROFILES," == *",voice,"* ]]  && voice_state="ON"
+    [[ ",$OLD_PROFILES," == *",wiki,"* ]]   && wiki_state="ON"
+    [[ ",$OLD_PROFILES," == *",paste,"* ]]  && paste_state="ON"
+    [[ ",$OLD_PROFILES," == *",blog,"* ]]   && blog_state="ON"
+fi
+
 SELECTED=$(whiptail --title "Choose Your Services" --checklist \
 "Stoat (chat) is always installed. Pick your extras:\n\
 Use SPACE to toggle, ENTER to confirm." 18 65 5 \
-"forum"         "Flarum — Community forum"              ON \
-"voice"         "Mumble — Low-latency voice chat"       ON \
-"wiki"          "BookStack — Wiki, guides, and docs"     ON \
-"paste"         "PrivateBin — Encrypted paste service"  ON \
-"blog"          "Ghost — Community blog / news"          OFF \
+"forum"         "Flarum — Community forum"              "$forum_state" \
+"voice"         "Mumble — Low-latency voice chat"       "$voice_state" \
+"wiki"          "BookStack — Wiki, guides, and docs"    "$wiki_state" \
+"paste"         "PrivateBin — Encrypted paste service"  "$paste_state" \
+"blog"          "Ghost — Community blog / news"         "$blog_state" \
 3>&1 1>&2 2>&3) || true
 
 # Parse selections into comma-separated profile list
@@ -227,13 +318,13 @@ You can enable services later with: evlbox enable <service>" 10 60
 fi
 
 # =============================================================================
-# DOMAIN & ROUTING (after service selection)
+# DOMAIN & ROUTING
 # =============================================================================
 SERVER_IP=$(get_server_ip)
 IP_ONLY=false
 DOMAIN=""
 
-# Initialize per-service URL variables
+# Initialize per-service URL variables (use old values as defaults in reconfigure)
 STOAT_URL=""
 FORUM_URL=""
 GHOST_URL=""
@@ -241,6 +332,12 @@ BOOKSTACK_URL=""
 PASTE_URL=""
 ROOT_URL=""
 ROOT_TARGET="stoat"
+
+# Pre-fill defaults from existing config
+DEFAULT_DOMAIN=""
+if [ "$RECONFIGURE" = true ]; then
+    DEFAULT_DOMAIN="$OLD_DOMAIN"
+fi
 
 # --- Step 1: Do you have a domain? ---
 DOMAIN_CHOICE=$(whiptail --title "Domain Configuration" --menu \
@@ -277,7 +374,7 @@ if [ "$IP_ONLY" = false ]; then
     # --- Express mode ---
     if [ "$ROUTING_MODE" = "express" ]; then
         DOMAIN=$(whiptail --title "Express Setup" --inputbox \
-"Enter your domain (e.g., myguild.com):" 10 60 "" 3>&1 1>&2 2>&3) || true
+"Enter your domain (e.g., myguild.com):" 10 60 "$DEFAULT_DOMAIN" 3>&1 1>&2 2>&3) || true
 
         if [ -z "$DOMAIN" ]; then
             whiptail --title "Error" --msgbox "Domain cannot be empty." 8 40
@@ -287,7 +384,7 @@ if [ "$IP_ONLY" = false ]; then
         # Auto-assign subdomains
         STOAT_URL="chat.${DOMAIN}"
         has_profile "forum"        && FORUM_URL="forum.${DOMAIN}"
-        has_profile "wiki"  && BOOKSTACK_URL="wiki.${DOMAIN}"
+        has_profile "wiki"         && BOOKSTACK_URL="wiki.${DOMAIN}"
         has_profile "paste"        && PASTE_URL="paste.${DOMAIN}"
 
         if has_profile "blog"; then
@@ -304,7 +401,7 @@ if [ "$IP_ONLY" = false ]; then
         DNS_MSG+="  A  ${DOMAIN}  →  ${SERVER_IP}\n"
         DNS_MSG+="  A  chat.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "forum"        && DNS_MSG+="  A  forum.${DOMAIN}  →  ${SERVER_IP}\n"
-        has_profile "wiki"  && DNS_MSG+="  A  wiki.${DOMAIN}  →  ${SERVER_IP}\n"
+        has_profile "wiki"         && DNS_MSG+="  A  wiki.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "paste"        && DNS_MSG+="  A  paste.${DOMAIN}  →  ${SERVER_IP}\n"
         DNS_MSG+="\nOr use a wildcard:\n"
         DNS_MSG+="  A  *.${DOMAIN}  →  ${SERVER_IP}\n"
@@ -316,7 +413,7 @@ if [ "$IP_ONLY" = false ]; then
     # --- Custom mode ---
     elif [ "$ROUTING_MODE" = "custom" ]; then
         DOMAIN=$(whiptail --title "Base Domain" --inputbox \
-"Enter your base domain (used for SSL and routing):" 10 60 "" 3>&1 1>&2 2>&3) || true
+"Enter your base domain (used for SSL and routing):" 10 60 "$DEFAULT_DOMAIN" 3>&1 1>&2 2>&3) || true
 
         if [ -z "$DOMAIN" ]; then
             whiptail --title "Error" --msgbox "Domain cannot be empty." 8 40
@@ -324,50 +421,55 @@ if [ "$IP_ONLY" = false ]; then
         fi
 
         # Stoat — subdomain required
+        local_stoat_default="${OLD_STOAT_URL:-chat.${DOMAIN}}"
         while true; do
             STOAT_URL=$(whiptail --title "Stoat Chat [subdomain required]" --inputbox \
 "Enter URL for Stoat chat.\n\
 Stoat MUST have its own subdomain (no subpaths).\n\n\
-Example: chat.${DOMAIN}" 12 60 "chat.${DOMAIN}" 3>&1 1>&2 2>&3) || true
+Example: chat.${DOMAIN}" 12 60 "$local_stoat_default" 3>&1 1>&2 2>&3) || true
             validate_subdomain_only "$STOAT_URL" "Stoat" && break
         done
 
         # Forum (Flarum) — subdomain or subpath
         if has_profile "forum"; then
+            local_forum_default="${OLD_FORUM_URL:-forum.${DOMAIN}}"
             FORUM_URL=$(whiptail --title "Flarum Forum [subdomain or subpath]" --inputbox \
 "Enter URL for Flarum forum.\n\
 Supports subdomain OR subpath.\n\n\
-Examples: forum.${DOMAIN} or ${DOMAIN}/forum" 12 60 "forum.${DOMAIN}" 3>&1 1>&2 2>&3) || true
+Examples: forum.${DOMAIN} or ${DOMAIN}/forum" 12 60 "$local_forum_default" 3>&1 1>&2 2>&3) || true
         fi
 
         # Ghost — subdomain required
         if has_profile "blog"; then
+            local_ghost_default="${OLD_GHOST_URL:-${DOMAIN}}"
             while true; do
                 GHOST_URL=$(whiptail --title "Ghost Blog [subdomain required]" --inputbox \
 "Enter URL for Ghost blog.\n\
 Ghost MUST have its own subdomain (no subpaths).\n\n\
-Example: ${DOMAIN} or blog.${DOMAIN}" 12 60 "${DOMAIN}" 3>&1 1>&2 2>&3) || true
+Example: ${DOMAIN} or blog.${DOMAIN}" 12 60 "$local_ghost_default" 3>&1 1>&2 2>&3) || true
                 validate_subdomain_only "$GHOST_URL" "Ghost" && break
             done
         fi
 
         # BookStack — subdomain required
         if has_profile "wiki"; then
+            local_wiki_default="${OLD_BOOKSTACK_URL:-wiki.${DOMAIN}}"
             while true; do
                 BOOKSTACK_URL=$(whiptail --title "BookStack Wiki [subdomain required]" --inputbox \
 "Enter URL for BookStack wiki.\n\
 BookStack MUST have its own subdomain (no subpaths).\n\n\
-Example: wiki.${DOMAIN}" 12 60 "wiki.${DOMAIN}" 3>&1 1>&2 2>&3) || true
+Example: wiki.${DOMAIN}" 12 60 "$local_wiki_default" 3>&1 1>&2 2>&3) || true
                 validate_subdomain_only "$BOOKSTACK_URL" "BookStack" && break
             done
         fi
 
         # PrivateBin — subdomain or subpath
         if has_profile "paste"; then
+            local_paste_default="${OLD_PASTE_URL:-paste.${DOMAIN}}"
             PASTE_URL=$(whiptail --title "PrivateBin Paste [subdomain or subpath]" --inputbox \
 "Enter URL for PrivateBin.\n\
 Supports subdomain OR subpath.\n\n\
-Examples: paste.${DOMAIN} or ${DOMAIN}/paste" 12 60 "paste.${DOMAIN}" 3>&1 1>&2 2>&3) || true
+Examples: paste.${DOMAIN} or ${DOMAIN}/paste" 12 60 "$local_paste_default" 3>&1 1>&2 2>&3) || true
         fi
 
         # Determine root domain target
@@ -399,8 +501,8 @@ Examples: paste.${DOMAIN} or ${DOMAIN}/paste" 12 60 "paste.${DOMAIN}" 3>&1 1>&2 
 fi
 
 # --- Admin Email ---
-DEFAULT_EMAIL=""
-[ "$IP_ONLY" = false ] && DEFAULT_EMAIL="admin@${DOMAIN}"
+DEFAULT_EMAIL="${OLD_ADMIN_EMAIL:-}"
+[ -z "$DEFAULT_EMAIL" ] && [ "$IP_ONLY" = false ] && DEFAULT_EMAIL="admin@${DOMAIN}"
 
 while true; do
     ADMIN_EMAIL=$(whiptail --title "Admin Email" --inputbox \
@@ -416,35 +518,89 @@ Used for SSL certificates and admin accounts." 10 60 "$DEFAULT_EMAIL" 3>&1 1>&2 
 done
 
 # =============================================================================
-# PASSWORDS
+# PASSWORDS — preserve existing, generate only for new services
 # =============================================================================
-MARIADB_ROOT_PW=$(generate_password)
-FLARUM_DB_PW=$(generate_password)
-FLARUM_ADMIN_PW=$(generate_password)
-GHOST_DB_PW=$(generate_password)
-BOOKSTACK_DB_PW=$(generate_password)
-BOOKSTACK_APP_KEY="base64:$(openssl rand -base64 32)"
-BOOKSTACK_ADMIN_PW=$(generate_password)
-MUMBLE_PW=$(generate_password)
+if [ "$RECONFIGURE" = true ]; then
+    # Preserve all existing passwords
+    MARIADB_ROOT_PW="$OLD_MARIADB_ROOT_PW"
+    FLARUM_DB_PW="$OLD_FLARUM_DB_PW"
+    FLARUM_ADMIN_PW="$OLD_FLARUM_ADMIN_PW"
+    GHOST_DB_PW="$OLD_GHOST_DB_PW"
+    BOOKSTACK_APP_KEY="$OLD_BOOKSTACK_APP_KEY"
+    BOOKSTACK_DB_PW="$OLD_BOOKSTACK_DB_PW"
+    MUMBLE_PW="$OLD_MUMBLE_PW"
+    BOOKSTACK_ADMIN_PW=""  # not stored in .env, only used on first setup
 
-# Customize passwords for selected services
-if has_profile "forum"; then
-    if whiptail --title "Flarum Admin" --yesno \
-    "Set a custom Flarum admin password?\n(Otherwise one will be auto-generated)" 10 60; then
-        FLARUM_ADMIN_PW=$(whiptail --title "Flarum Admin Password" --passwordbox \
-        "Enter your Flarum forum admin password (min 8 characters):" 10 60 3>&1 1>&2 2>&3) || true
-        if [ ${#FLARUM_ADMIN_PW} -lt 8 ]; then
-            FLARUM_ADMIN_PW=$(generate_password)
-            whiptail --title "Password" --msgbox "Password too short. Auto-generated one will be used." 8 60
+    # MariaDB root — always needed, generate if somehow missing
+    [ -z "$MARIADB_ROOT_PW" ] && MARIADB_ROOT_PW=$(generate_password)
+
+    # Generate fresh passwords for newly enabled services only
+    if is_new_profile "forum"; then
+        FLARUM_DB_PW=$(generate_password)
+        FLARUM_ADMIN_PW=$(generate_password)
+    fi
+    if is_new_profile "blog"; then
+        GHOST_DB_PW=$(generate_password)
+    fi
+    if is_new_profile "wiki"; then
+        BOOKSTACK_APP_KEY="base64:$(openssl rand -base64 32)"
+        BOOKSTACK_DB_PW=$(generate_password)
+        BOOKSTACK_ADMIN_PW=$(generate_password)
+    fi
+    if is_new_profile "voice"; then
+        MUMBLE_PW=$(generate_password)
+    fi
+
+    # Only show password prompts for newly enabled services
+    if is_new_profile "forum"; then
+        if whiptail --title "Flarum Admin" --yesno \
+        "Set a custom Flarum admin password?\n(Otherwise one will be auto-generated)" 10 60; then
+            FLARUM_ADMIN_PW=$(whiptail --title "Flarum Admin Password" --passwordbox \
+            "Enter your Flarum forum admin password (min 8 characters):" 10 60 3>&1 1>&2 2>&3) || true
+            if [ ${#FLARUM_ADMIN_PW} -lt 8 ]; then
+                FLARUM_ADMIN_PW=$(generate_password)
+                whiptail --title "Password" --msgbox "Password too short. Auto-generated one will be used." 8 60
+            fi
         fi
     fi
-fi
 
-if has_profile "voice"; then
-    if whiptail --title "Mumble Voice Chat" --yesno \
-    "Set a custom Mumble SuperUser password?\n(Used to administer voice channels)" 10 60; then
-        MUMBLE_PW=$(whiptail --title "Mumble SuperUser Password" --passwordbox \
-        "Enter Mumble SuperUser password:" 10 60 3>&1 1>&2 2>&3) || true
+    if is_new_profile "voice"; then
+        if whiptail --title "Mumble Voice Chat" --yesno \
+        "Set a custom Mumble SuperUser password?\n(Used to administer voice channels)" 10 60; then
+            MUMBLE_PW=$(whiptail --title "Mumble SuperUser Password" --passwordbox \
+            "Enter Mumble SuperUser password:" 10 60 3>&1 1>&2 2>&3) || true
+        fi
+    fi
+else
+    # First run or full reset — generate everything fresh
+    MARIADB_ROOT_PW=$(generate_password)
+    FLARUM_DB_PW=$(generate_password)
+    FLARUM_ADMIN_PW=$(generate_password)
+    GHOST_DB_PW=$(generate_password)
+    BOOKSTACK_DB_PW=$(generate_password)
+    BOOKSTACK_APP_KEY="base64:$(openssl rand -base64 32)"
+    BOOKSTACK_ADMIN_PW=$(generate_password)
+    MUMBLE_PW=$(generate_password)
+
+    # Customize passwords for selected services
+    if has_profile "forum"; then
+        if whiptail --title "Flarum Admin" --yesno \
+        "Set a custom Flarum admin password?\n(Otherwise one will be auto-generated)" 10 60; then
+            FLARUM_ADMIN_PW=$(whiptail --title "Flarum Admin Password" --passwordbox \
+            "Enter your Flarum forum admin password (min 8 characters):" 10 60 3>&1 1>&2 2>&3) || true
+            if [ ${#FLARUM_ADMIN_PW} -lt 8 ]; then
+                FLARUM_ADMIN_PW=$(generate_password)
+                whiptail --title "Password" --msgbox "Password too short. Auto-generated one will be used." 8 60
+            fi
+        fi
+    fi
+
+    if has_profile "voice"; then
+        if whiptail --title "Mumble Voice Chat" --yesno \
+        "Set a custom Mumble SuperUser password?\n(Used to administer voice channels)" 10 60; then
+            MUMBLE_PW=$(whiptail --title "Mumble SuperUser Password" --passwordbox \
+            "Enter Mumble SuperUser password:" 10 60 3>&1 1>&2 2>&3) || true
+        fi
     fi
 fi
 
@@ -455,11 +611,7 @@ fi
 # Compute FLARUM_BASE_URL (full URL including subpath if applicable)
 FLARUM_BASE_URL=""
 if has_profile "forum" && [ -n "$FORUM_URL" ]; then
-    if [[ "$FORUM_URL" == *"/"* ]]; then
-        FLARUM_BASE_URL="https://${FORUM_URL}"
-    else
-        FLARUM_BASE_URL="https://${FORUM_URL}"
-    fi
+    FLARUM_BASE_URL="https://${FORUM_URL}"
 fi
 
 # ---- Write .env ----
@@ -481,7 +633,7 @@ PASTE_URL=${PASTE_URL}
 ROOT_URL=${ROOT_URL}
 ROOT_TARGET=${ROOT_TARGET}
 
-# MariaDB (used by forum and blog)
+# MariaDB (used by forum, blog, wiki)
 MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PW}
 
 # Flarum
@@ -510,7 +662,7 @@ EOF
 
 chmod 600 "$ENV_FILE"
 
-# ---- Create MariaDB init script (only matters if forum or blog enabled) ----
+# ---- Create MariaDB init script (idempotent — safe to regenerate) ----
 mkdir -p "$STACK_DIR/templates/initdb"
 cat > "$STACK_DIR/templates/initdb/init.sql" << EOF
 CREATE DATABASE IF NOT EXISTS \`flarum\`;
@@ -528,32 +680,38 @@ GRANT ALL PRIVILEGES ON \`bookstack\`.* TO 'bookstack'@'%';
 FLUSH PRIVILEGES;
 EOF
 
-# ---- Generate Caddyfile ----
+# ---- Generate Caddyfile (always safe to regenerate) ----
 generate_caddyfile
 
 # ---- Configure Stoat ----
-whiptail --title "Setting up Stoat" --infobox \
-"Configuring Stoat chat platform...\nThis generates encryption keys and config." 8 60
-
 if [ -d "$STOAT_DIR" ]; then
     # Create shared Docker network for cross-compose communication
     docker network create evlbox 2>/dev/null || true
 
-    cd "$STOAT_DIR"
+    if [ "$RECONFIGURE" = true ] && [ "$DOMAIN" = "$OLD_DOMAIN" ]; then
+        # Domain unchanged — don't touch Stoat config, just ensure override is current
+        cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
+    else
+        # First run, full reset, or domain changed — run Stoat's config generator
+        whiptail --title "Setting up Stoat" --infobox \
+        "Configuring Stoat chat platform...\nThis generates encryption keys and config." 8 60
 
-    # Run Stoat's config generator non-interactively:
-    #   - "y" = yes, behind another reverse proxy (our Caddy)
-    #   - "y" = yes, enable camera/screen sharing
-    if [ -f "$STOAT_DIR/generate_config.sh" ]; then
-        printf 'y\ny\n' | bash "$STOAT_DIR/generate_config.sh" --overwrite "$STOAT_URL"
+        cd "$STOAT_DIR"
+
+        # Run Stoat's config generator non-interactively:
+        #   - "y" = yes, behind another reverse proxy (our Caddy)
+        #   - "y" = yes, enable camera/screen sharing
+        if [ -f "$STOAT_DIR/generate_config.sh" ]; then
+            printf 'y\ny\n' | bash "$STOAT_DIR/generate_config.sh" --overwrite "$STOAT_URL"
+        fi
+
+        # Replace Stoat's generated compose.override.yml with ours.
+        # Stoat's own Caddy handles all internal path routing (/api, /ws, /autumn, etc.)
+        # Our override just puts their Caddy on the shared evlbox network so our Caddy
+        # can proxy to it. No .env.web or Revolt.toml patching needed — the generator's
+        # "behind a proxy" output is correct as-is.
+        cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
     fi
-
-    # Replace Stoat's generated compose.override.yml with ours.
-    # Stoat's own Caddy handles all internal path routing (/api, /ws, /autumn, etc.)
-    # Our override just puts their Caddy on the shared evlbox network so our Caddy
-    # can proxy to it. No .env.web or Revolt.toml patching needed — the generator's
-    # "behind a proxy" output is correct as-is.
-    cp "$STACK_DIR/templates/stoat-compose.override.yml" "$STOAT_DIR/compose.override.yml"
 else
     echo "WARNING: Stoat directory not found at $STOAT_DIR"
     echo "Stoat should have been cloned during provisioning."
@@ -577,18 +735,18 @@ CREDS_FILE="/root/evlbox-credentials.txt"
     echo ""
     echo "--- Service URLs ---"
     echo "Chat:         https://${STOAT_URL}"
-    [ -n "$FORUM_URL" ]   && has_profile "forum"        && echo "Forum:        https://${FORUM_URL}"
-    [ -n "$GHOST_URL" ]   && has_profile "blog"         && echo "Blog:         https://${GHOST_URL}"
-    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && echo "Wiki:         https://${BOOKSTACK_URL}"
-    [ -n "$PASTE_URL" ]   && has_profile "paste"        && echo "Paste:        https://${PASTE_URL}"
+    [ -n "$FORUM_URL" ]     && has_profile "forum"  && echo "Forum:        https://${FORUM_URL}"
+    [ -n "$GHOST_URL" ]     && has_profile "blog"   && echo "Blog:         https://${GHOST_URL}"
+    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && echo "Wiki:         https://${BOOKSTACK_URL}"
+    [ -n "$PASTE_URL" ]     && has_profile "paste"  && echo "Paste:        https://${PASTE_URL}"
     has_profile "voice" && echo "Voice:        ${DOMAIN}:64738 (Mumble)"
     echo ""
     echo "--- Credentials ---"
     echo "Stoat:        Set up at https://${STOAT_URL}"
-    [ -n "$FORUM_URL" ]   && has_profile "forum"        && echo "Flarum Admin: admin / ${FLARUM_ADMIN_PW}"
-    has_profile "voice"   && echo "Mumble SuperUser: SuperUser / ${MUMBLE_PW}"
-    [ -n "$GHOST_URL" ]   && has_profile "blog"         && echo "Ghost:        Set up at https://${GHOST_URL}/ghost"
-    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && echo "BookStack:    ${ADMIN_EMAIL} / ${BOOKSTACK_ADMIN_PW}"
+    [ -n "$FORUM_URL" ]     && has_profile "forum"  && echo "Flarum Admin: admin / ${FLARUM_ADMIN_PW}"
+    has_profile "voice"     && echo "Mumble SuperUser: SuperUser / ${MUMBLE_PW}"
+    [ -n "$GHOST_URL" ]     && has_profile "blog"   && echo "Ghost:        Set up at https://${GHOST_URL}/ghost"
+    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && echo "BookStack:    ${ADMIN_EMAIL} / (set during setup)"
     echo ""
     echo "--- Internal (do not share) ---"
     echo "MariaDB Root Password: ${MARIADB_ROOT_PW}"
@@ -604,6 +762,12 @@ echo "Starting services... hang tight, this may take a few minutes."
 echo "Do not close this terminal."
 echo ""
 
+echo "  Stopping existing services..."
+cd "$STOAT_DIR"
+docker compose down --remove-orphans 2>/dev/null || true
+cd "$STACK_DIR"
+docker compose down --remove-orphans 2>/dev/null || true
+
 echo "  Starting Stoat chat platform..."
 cd "$STOAT_DIR"
 docker compose up -d --quiet-pull 2>&1 | tail -1
@@ -612,17 +776,19 @@ echo "  Starting stack services..."
 cd "$STACK_DIR"
 docker compose up -d --quiet-pull 2>&1 | tail -1
 
-# ---- Reset BookStack default admin credentials ----
-if has_profile "wiki"; then
-    echo "  Waiting for BookStack to initialize..."
-    for i in $(seq 1 30); do
-        if docker compose exec -T bookstack php /app/www/artisan bookstack:create-admin \
-            --email="$ADMIN_EMAIL" --name="Admin" --password="$BOOKSTACK_ADMIN_PW" --initial \
-            2>/dev/null; then
-            break
-        fi
-        sleep 2
-    done
+# ---- Reset BookStack default admin credentials (first run / new wiki only) ----
+if [ "$RECONFIGURE" = false ] || is_new_profile "wiki"; then
+    if has_profile "wiki" && [ -n "$BOOKSTACK_ADMIN_PW" ]; then
+        echo "  Waiting for BookStack to initialize..."
+        for i in $(seq 1 30); do
+            if docker compose exec -T bookstack php /app/www/artisan bookstack:create-admin \
+                --email="$ADMIN_EMAIL" --name="Admin" --password="$BOOKSTACK_ADMIN_PW" --initial \
+                2>/dev/null; then
+                break
+            fi
+            sleep 2
+        done
+    fi
 fi
 
 echo ""
@@ -631,10 +797,10 @@ echo ""
 SUMMARY="Your Gaming Community in a Box is running!\n\n"
 SUMMARY+="Service URLs:\n"
 SUMMARY+="  Chat:         https://${STOAT_URL}\n"
-[ -n "$FORUM_URL" ]   && has_profile "forum"        && SUMMARY+="  Forum:        https://${FORUM_URL}\n"
-[ -n "$GHOST_URL" ]   && has_profile "blog"         && SUMMARY+="  Blog:         https://${GHOST_URL}\n"
-[ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && SUMMARY+="  Wiki:         https://${BOOKSTACK_URL}\n"
-[ -n "$PASTE_URL" ]   && has_profile "paste"        && SUMMARY+="  Paste:        https://${PASTE_URL}\n"
+[ -n "$FORUM_URL" ]     && has_profile "forum"  && SUMMARY+="  Forum:        https://${FORUM_URL}\n"
+[ -n "$GHOST_URL" ]     && has_profile "blog"   && SUMMARY+="  Blog:         https://${GHOST_URL}\n"
+[ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && SUMMARY+="  Wiki:         https://${BOOKSTACK_URL}\n"
+[ -n "$PASTE_URL" ]     && has_profile "paste"  && SUMMARY+="  Paste:        https://${PASTE_URL}\n"
 has_profile "voice" && SUMMARY+="  Voice:        ${DOMAIN}:64738 (Mumble)\n"
 SUMMARY+="\nCredentials saved to: /root/evlbox-credentials.txt\n"
 SUMMARY+="Delete that file after saving your passwords!\n\n"
