@@ -667,14 +667,17 @@ mkdir -p "$STACK_DIR/templates/initdb"
 cat > "$STACK_DIR/templates/initdb/init.sql" << EOF
 CREATE DATABASE IF NOT EXISTS \`flarum\`;
 CREATE USER IF NOT EXISTS 'flarum'@'%' IDENTIFIED BY '${FLARUM_DB_PW}';
+ALTER USER 'flarum'@'%' IDENTIFIED BY '${FLARUM_DB_PW}';
 GRANT ALL PRIVILEGES ON \`flarum\`.* TO 'flarum'@'%';
 
 CREATE DATABASE IF NOT EXISTS \`ghost\`;
 CREATE USER IF NOT EXISTS 'ghost'@'%' IDENTIFIED BY '${GHOST_DB_PW}';
+ALTER USER 'ghost'@'%' IDENTIFIED BY '${GHOST_DB_PW}';
 GRANT ALL PRIVILEGES ON \`ghost\`.* TO 'ghost'@'%';
 
 CREATE DATABASE IF NOT EXISTS \`bookstack\`;
 CREATE USER IF NOT EXISTS 'bookstack'@'%' IDENTIFIED BY '${BOOKSTACK_DB_PW}';
+ALTER USER 'bookstack'@'%' IDENTIFIED BY '${BOOKSTACK_DB_PW}';
 GRANT ALL PRIVILEGES ON \`bookstack\`.* TO 'bookstack'@'%';
 
 FLUSH PRIVILEGES;
@@ -764,9 +767,17 @@ echo ""
 
 echo "  Stopping existing services..."
 cd "$STOAT_DIR"
-docker compose down --remove-orphans 2>/dev/null || true
+if [ "$FULL_RESET" = true ]; then
+    docker compose down -v --remove-orphans 2>/dev/null || true
+else
+    docker compose down --remove-orphans 2>/dev/null || true
+fi
 cd "$STACK_DIR"
-docker compose down --remove-orphans 2>/dev/null || true
+if [ "$FULL_RESET" = true ]; then
+    docker compose down -v --remove-orphans 2>/dev/null || true
+else
+    docker compose down --remove-orphans 2>/dev/null || true
+fi
 
 echo "  Starting Stoat chat platform..."
 cd "$STOAT_DIR"
