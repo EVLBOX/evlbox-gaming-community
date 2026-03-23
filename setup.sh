@@ -424,6 +424,7 @@ FLARUM_ADMIN_PW=$(generate_password)
 GHOST_DB_PW=$(generate_password)
 BOOKSTACK_DB_PW=$(generate_password)
 BOOKSTACK_APP_KEY="base64:$(openssl rand -base64 32)"
+BOOKSTACK_ADMIN_PW=$(generate_password)
 MUMBLE_PW=$(generate_password)
 
 # Customize passwords for selected services
@@ -587,7 +588,7 @@ CREDS_FILE="/root/evlbox-credentials.txt"
     [ -n "$FORUM_URL" ]   && has_profile "forum"        && echo "Flarum Admin: admin / ${FLARUM_ADMIN_PW}"
     has_profile "voice"   && echo "Mumble SuperUser: SuperUser / ${MUMBLE_PW}"
     [ -n "$GHOST_URL" ]   && has_profile "blog"         && echo "Ghost:        Set up at https://${GHOST_URL}/ghost"
-    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && echo "BookStack:    https://${BOOKSTACK_URL} (default: admin@admin.com / password)"
+    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && echo "BookStack:    ${ADMIN_EMAIL} / ${BOOKSTACK_ADMIN_PW}"
     echo ""
     echo "--- Internal (do not share) ---"
     echo "MariaDB Root Password: ${MARIADB_ROOT_PW}"
@@ -610,6 +611,19 @@ docker compose up -d --quiet-pull 2>&1 | tail -1
 echo "  Starting stack services..."
 cd "$STACK_DIR"
 docker compose up -d --quiet-pull 2>&1 | tail -1
+
+# ---- Reset BookStack default admin credentials ----
+if has_profile "wiki"; then
+    echo "  Waiting for BookStack to initialize..."
+    for i in $(seq 1 30); do
+        if docker compose exec -T bookstack php /app/www/artisan bookstack:create-admin \
+            --email="$ADMIN_EMAIL" --name="Admin" --password="$BOOKSTACK_ADMIN_PW" --initial \
+            2>/dev/null; then
+            break
+        fi
+        sleep 2
+    done
+fi
 
 echo ""
 
