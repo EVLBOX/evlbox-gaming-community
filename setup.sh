@@ -725,6 +725,8 @@ echo "  Stopping existing services..."
 cd "$STOAT_DIR"
 if [ "$FULL_RESET" = true ]; then
     docker compose down -v --remove-orphans 2>/dev/null || true
+    # Stoat uses bind mounts under ./data/ — must rm explicitly
+    rm -rf "$STOAT_DIR/data"
 else
     docker compose down --remove-orphans 2>/dev/null || true
 fi
@@ -783,30 +785,31 @@ if [ "$RECONFIGURE" = false ] || is_new_profile "forum"; then
         done
         # Generate bcrypt hash via PHP inside the flarum container
         FLARUM_HASH=$(docker compose exec -T flarum php -r \
-            "echo password_hash('${FLARUM_ADMIN_PW}', PASSWORD_BCRYPT);" 2>/dev/null)
+            "echo password_hash('${FLARUM_ADMIN_PW}', PASSWORD_BCRYPT);" 2>/dev/null) || true
         if [ -n "$FLARUM_HASH" ]; then
             docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
                 -e "UPDATE flarum.users SET username='admin', email='${ADMIN_EMAIL}', password_hash='${FLARUM_HASH}' WHERE id=1;" \
-                >/dev/null 2>&1
+                >/dev/null 2>&1 || true
         fi
     fi
 fi
 
 echo ""
-
-# ---- Build summary ----
-SUMMARY="Your Gaming Community in a Box is running!\n\n"
-SUMMARY+="Service URLs:\n"
-SUMMARY+="  Chat:         https://${STOAT_URL}\n"
-[ -n "$FORUM_URL" ]     && has_profile "forum"  && SUMMARY+="  Forum:        https://${FORUM_URL}\n"
-[ -n "$GHOST_URL" ]     && has_profile "blog"   && SUMMARY+="  Blog:         https://${GHOST_URL}\n"
-[ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && SUMMARY+="  Wiki:         https://${BOOKSTACK_URL}\n"
-[ -n "$PASTE_URL" ]     && has_profile "paste"  && SUMMARY+="  Paste:        https://${PASTE_URL}\n"
-has_profile "voice" && SUMMARY+="  Voice:        ${DOMAIN}:64738 (Mumble)\n"
-SUMMARY+="\nCredentials saved to: /root/evlbox-credentials.txt\n"
-SUMMARY+="Delete that file after saving your passwords!\n\n"
-SUMMARY+="Run 'evlbox status' to check service health.\n"
-SUMMARY+="Run 'evlbox enable <service>' to add services later.\n"
-SUMMARY+="Run 'evlbox help' for more commands."
-
-whiptail --title "Setup Complete!" --msgbox "$SUMMARY" 24 65
+echo "=================================================="
+echo "  Setup Complete!"
+echo "=================================================="
+echo ""
+echo "Service URLs:"
+echo "  Chat:         https://${STOAT_URL}"
+[ -n "$FORUM_URL" ]     && has_profile "forum"  && echo "  Forum:        https://${FORUM_URL}"
+[ -n "$GHOST_URL" ]     && has_profile "blog"   && echo "  Blog:         https://${GHOST_URL}"
+[ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && echo "  Wiki:         https://${BOOKSTACK_URL}"
+[ -n "$PASTE_URL" ]     && has_profile "paste"  && echo "  Paste:        https://${PASTE_URL}"
+has_profile "voice" && echo "  Voice:        ${DOMAIN}:64738 (Mumble)"
+echo ""
+echo "Credentials saved to: /root/evlbox-credentials.txt"
+echo "Delete that file after saving your passwords!"
+echo ""
+echo "Run 'evlbox status' to check service health."
+echo "=================================================="
+echo ""
