@@ -538,7 +538,7 @@ if [ -d "$STOAT_DIR" ]; then
     #   - "y" = yes, behind another reverse proxy (our Caddy)
     #   - "y" = yes, enable camera/screen sharing
     if [ -f "$STOAT_DIR/generate_config.sh" ]; then
-        printf 'y\ny\n' | bash "$STOAT_DIR/generate_config.sh" "$DOMAIN"
+        printf 'y\ny\n' | bash "$STOAT_DIR/generate_config.sh" --overwrite "$STOAT_URL"
     fi
 
     # Replace Stoat's generated compose.override.yml with ours.
