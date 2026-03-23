@@ -780,7 +780,7 @@ if [ "$RECONFIGURE" = false ] || is_new_profile "forum"; then
         # Wait for Flarum's users table to be populated (install complete)
         for i in $(seq 1 90); do
             docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
-                -e "SELECT 1 FROM flarum.users LIMIT 1" >/dev/null 2>&1 && break
+                -e "SELECT 1 FROM flarum.flarum_users LIMIT 1" >/dev/null 2>&1 && break
             sleep 3
         done
         # Generate bcrypt hash via PHP inside the flarum container
@@ -788,7 +788,7 @@ if [ "$RECONFIGURE" = false ] || is_new_profile "forum"; then
             "echo password_hash('${FLARUM_ADMIN_PW}', PASSWORD_BCRYPT);" 2>/dev/null) || true
         if [ -n "$FLARUM_HASH" ]; then
             docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
-                -e "UPDATE flarum.users SET username='admin', email='${ADMIN_EMAIL}', password_hash='${FLARUM_HASH}' WHERE id=1;" \
+                -e "UPDATE flarum.flarum_users SET username='admin', email='${ADMIN_EMAIL}', password_hash='${FLARUM_HASH}' WHERE id=1;" \
                 >/dev/null 2>&1 || true
         fi
     fi
