@@ -217,7 +217,6 @@ if [ -f "$ENV_FILE" ]; then
     # Preserve all existing passwords/secrets from sourced .env
     OLD_MARIADB_ROOT_PW="${MARIADB_ROOT_PASSWORD:-}"
     OLD_FLARUM_DB_PW="${FLARUM_DB_PASSWORD:-}"
-    OLD_FLARUM_ADMIN_PW="${FLARUM_ADMIN_PASSWORD:-}"
     OLD_GHOST_DB_PW="${GHOST_DB_PASSWORD:-}"
     OLD_BOOKSTACK_APP_KEY="${BOOKSTACK_APP_KEY:-}"
     OLD_BOOKSTACK_DB_PW="${BOOKSTACK_DB_PASSWORD:-}"
@@ -524,7 +523,7 @@ if [ "$RECONFIGURE" = true ]; then
     # Preserve all existing passwords
     MARIADB_ROOT_PW="$OLD_MARIADB_ROOT_PW"
     FLARUM_DB_PW="$OLD_FLARUM_DB_PW"
-    FLARUM_ADMIN_PW="$OLD_FLARUM_ADMIN_PW"
+    FLARUM_ADMIN_PW=""  # not stored in .env — only set on first install of forum
     GHOST_DB_PW="$OLD_GHOST_DB_PW"
     BOOKSTACK_APP_KEY="$OLD_BOOKSTACK_APP_KEY"
     BOOKSTACK_DB_PW="$OLD_BOOKSTACK_DB_PW"
@@ -551,26 +550,6 @@ if [ "$RECONFIGURE" = true ]; then
         MUMBLE_PW=$(generate_password)
     fi
 
-    # Only show password prompts for newly enabled services
-    if is_new_profile "forum"; then
-        if whiptail --title "Flarum Admin" --yesno \
-        "Set a custom Flarum admin password?\n(Otherwise one will be auto-generated)" 10 60; then
-            FLARUM_ADMIN_PW=$(whiptail --title "Flarum Admin Password" --passwordbox \
-            "Enter your Flarum forum admin password (min 8 characters):" 10 60 3>&1 1>&2 2>&3) || true
-            if [ ${#FLARUM_ADMIN_PW} -lt 8 ]; then
-                FLARUM_ADMIN_PW=$(generate_password)
-                whiptail --title "Password" --msgbox "Password too short. Auto-generated one will be used." 8 60
-            fi
-        fi
-    fi
-
-    if is_new_profile "voice"; then
-        if whiptail --title "Mumble Voice Chat" --yesno \
-        "Set a custom Mumble SuperUser password?\n(Used to administer voice channels)" 10 60; then
-            MUMBLE_PW=$(whiptail --title "Mumble SuperUser Password" --passwordbox \
-            "Enter Mumble SuperUser password:" 10 60 3>&1 1>&2 2>&3) || true
-        fi
-    fi
 else
     # First run or full reset — generate everything fresh
     MARIADB_ROOT_PW=$(generate_password)
@@ -582,26 +561,6 @@ else
     BOOKSTACK_ADMIN_PW=$(generate_password)
     MUMBLE_PW=$(generate_password)
 
-    # Customize passwords for selected services
-    if has_profile "forum"; then
-        if whiptail --title "Flarum Admin" --yesno \
-        "Set a custom Flarum admin password?\n(Otherwise one will be auto-generated)" 10 60; then
-            FLARUM_ADMIN_PW=$(whiptail --title "Flarum Admin Password" --passwordbox \
-            "Enter your Flarum forum admin password (min 8 characters):" 10 60 3>&1 1>&2 2>&3) || true
-            if [ ${#FLARUM_ADMIN_PW} -lt 8 ]; then
-                FLARUM_ADMIN_PW=$(generate_password)
-                whiptail --title "Password" --msgbox "Password too short. Auto-generated one will be used." 8 60
-            fi
-        fi
-    fi
-
-    if has_profile "voice"; then
-        if whiptail --title "Mumble Voice Chat" --yesno \
-        "Set a custom Mumble SuperUser password?\n(Used to administer voice channels)" 10 60; then
-            MUMBLE_PW=$(whiptail --title "Mumble SuperUser Password" --passwordbox \
-            "Enter Mumble SuperUser password:" 10 60 3>&1 1>&2 2>&3) || true
-        fi
-    fi
 fi
 
 # =============================================================================
@@ -640,9 +599,6 @@ MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PW}
 FLARUM_DB_NAME=flarum
 FLARUM_DB_USER=flarum
 FLARUM_DB_PASSWORD=${FLARUM_DB_PW}
-FLARUM_ADMIN_USER=admin
-FLARUM_ADMIN_PASSWORD=${FLARUM_ADMIN_PW}
-FLARUM_ADMIN_EMAIL=${ADMIN_EMAIL}
 FLARUM_BASE_URL=${FLARUM_BASE_URL}
 
 # Ghost
@@ -746,10 +702,10 @@ CREDS_FILE="/root/evlbox-credentials.txt"
     echo ""
     echo "--- Credentials ---"
     echo "Stoat:        Set up at https://${STOAT_URL}"
-    [ -n "$FORUM_URL" ]     && has_profile "forum"  && echo "Flarum Admin: admin / ${FLARUM_ADMIN_PW}"
+    [ -n "$FORUM_URL" ]     && has_profile "forum"  && [ -n "$FLARUM_ADMIN_PW" ] && echo "Flarum Admin: admin / ${FLARUM_ADMIN_PW}"
     has_profile "voice"     && echo "Mumble SuperUser: SuperUser / ${MUMBLE_PW}"
     [ -n "$GHOST_URL" ]     && has_profile "blog"   && echo "Ghost:        Set up at https://${GHOST_URL}/ghost"
-    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && echo "BookStack:    ${ADMIN_EMAIL} / (set during setup)"
+    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"   && [ -n "$BOOKSTACK_ADMIN_PW" ] && echo "BookStack:    ${ADMIN_EMAIL} / ${BOOKSTACK_ADMIN_PW}"
     echo ""
     echo "--- Internal (do not share) ---"
     echo "MariaDB Root Password: ${MARIADB_ROOT_PW}"
@@ -810,6 +766,29 @@ if [ "$RECONFIGURE" = false ] || is_new_profile "wiki"; then
                 >/dev/null 2>&1 && break
             sleep 3
         done
+    fi
+fi
+
+# ---- Set Flarum admin credentials post-install (first run / new forum only) ----
+# crazymax/flarum ignores env vars for admin — always creates user "flarum" / "flarum".
+# We update it directly in MariaDB after Flarum has run its install migrations.
+if [ "$RECONFIGURE" = false ] || is_new_profile "forum"; then
+    if has_profile "forum"; then
+        echo "  Waiting for Flarum to initialize..."
+        # Wait for Flarum's users table to be populated (install complete)
+        for i in $(seq 1 90); do
+            docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
+                -e "SELECT 1 FROM flarum.users LIMIT 1" >/dev/null 2>&1 && break
+            sleep 3
+        done
+        # Generate bcrypt hash via PHP inside the flarum container
+        FLARUM_HASH=$(docker compose exec -T flarum php -r \
+            "echo password_hash('${FLARUM_ADMIN_PW}', PASSWORD_BCRYPT);" 2>/dev/null)
+        if [ -n "$FLARUM_HASH" ]; then
+            docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
+                -e "UPDATE flarum.users SET username='admin', email='${ADMIN_EMAIL}', password_hash='${FLARUM_HASH}' WHERE id=1;" \
+                >/dev/null 2>&1
+        fi
     fi
 fi
 
