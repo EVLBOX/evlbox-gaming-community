@@ -143,12 +143,12 @@ ${GHOST_URL} {
 EOF
     fi
 
-    # --- Zipline (screenshots) — subdomain only ---
-    if has_profile "screenshots"; then
+    # --- BookStack (wiki) — subdomain only ---
+    if has_profile "wiki"; then
         cat >> "$caddyfile" << EOF
 
-${ZIPLINE_URL} {
-	reverse_proxy zipline:3000
+${BOOKSTACK_URL} {
+	reverse_proxy bookstack:6875
 }
 EOF
     fi
@@ -202,7 +202,7 @@ SELECTED=$(whiptail --title "Choose Your Services" --checklist \
 Use SPACE to toggle, ENTER to confirm." 18 65 5 \
 "forum"         "Flarum — Community forum"              ON \
 "voice"         "Mumble — Low-latency voice chat"       ON \
-"screenshots"   "Zipline — Screenshot & image hosting"  ON \
+"wiki"          "BookStack — Wiki, guides, and docs"     ON \
 "paste"         "PrivateBin — Encrypted paste service"  ON \
 "blog"          "Ghost — Community blog / news"          OFF \
 3>&1 1>&2 2>&3) || true
@@ -237,7 +237,7 @@ DOMAIN=""
 STOAT_URL=""
 FORUM_URL=""
 GHOST_URL=""
-ZIPLINE_URL=""
+BOOKSTACK_URL=""
 PASTE_URL=""
 ROOT_URL=""
 ROOT_TARGET="stoat"
@@ -287,7 +287,7 @@ if [ "$IP_ONLY" = false ]; then
         # Auto-assign subdomains
         STOAT_URL="chat.${DOMAIN}"
         has_profile "forum"        && FORUM_URL="forum.${DOMAIN}"
-        has_profile "screenshots"  && ZIPLINE_URL="img.${DOMAIN}"
+        has_profile "wiki"  && BOOKSTACK_URL="wiki.${DOMAIN}"
         has_profile "paste"        && PASTE_URL="paste.${DOMAIN}"
 
         if has_profile "blog"; then
@@ -304,7 +304,7 @@ if [ "$IP_ONLY" = false ]; then
         DNS_MSG+="  A  ${DOMAIN}  →  ${SERVER_IP}\n"
         DNS_MSG+="  A  chat.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "forum"        && DNS_MSG+="  A  forum.${DOMAIN}  →  ${SERVER_IP}\n"
-        has_profile "screenshots"  && DNS_MSG+="  A  img.${DOMAIN}  →  ${SERVER_IP}\n"
+        has_profile "wiki"  && DNS_MSG+="  A  wiki.${DOMAIN}  →  ${SERVER_IP}\n"
         has_profile "paste"        && DNS_MSG+="  A  paste.${DOMAIN}  →  ${SERVER_IP}\n"
         DNS_MSG+="\nOr use a wildcard:\n"
         DNS_MSG+="  A  *.${DOMAIN}  →  ${SERVER_IP}\n"
@@ -351,14 +351,14 @@ Example: ${DOMAIN} or blog.${DOMAIN}" 12 60 "${DOMAIN}" 3>&1 1>&2 2>&3) || true
             done
         fi
 
-        # Zipline — subdomain required
-        if has_profile "screenshots"; then
+        # BookStack — subdomain required
+        if has_profile "wiki"; then
             while true; do
-                ZIPLINE_URL=$(whiptail --title "Zipline Images [subdomain required]" --inputbox \
-"Enter URL for Zipline image hosting.\n\
-Zipline MUST have its own subdomain (no subpaths).\n\n\
-Example: img.${DOMAIN}" 12 60 "img.${DOMAIN}" 3>&1 1>&2 2>&3) || true
-                validate_subdomain_only "$ZIPLINE_URL" "Zipline" && break
+                BOOKSTACK_URL=$(whiptail --title "BookStack Wiki [subdomain required]" --inputbox \
+"Enter URL for BookStack wiki.\n\
+BookStack MUST have its own subdomain (no subpaths).\n\n\
+Example: wiki.${DOMAIN}" 12 60 "wiki.${DOMAIN}" 3>&1 1>&2 2>&3) || true
+                validate_subdomain_only "$BOOKSTACK_URL" "BookStack" && break
             done
         fi
 
@@ -386,7 +386,7 @@ Examples: paste.${DOMAIN} or ${DOMAIN}/paste" 12 60 "paste.${DOMAIN}" 3>&1 1>&2 
         dns_hosts["${STOAT_URL}"]=1
         [ -n "$FORUM_URL" ] && dns_hosts["${FORUM_URL%%/*}"]=1
         [ -n "$GHOST_URL" ] && dns_hosts["${GHOST_URL}"]=1
-        [ -n "$ZIPLINE_URL" ] && dns_hosts["${ZIPLINE_URL}"]=1
+        [ -n "$BOOKSTACK_URL" ] && dns_hosts["${BOOKSTACK_URL}"]=1
         [ -n "$PASTE_URL" ] && dns_hosts["${PASTE_URL%%/*}"]=1
 
         for host in "${!dns_hosts[@]}"; do
@@ -422,8 +422,7 @@ MARIADB_ROOT_PW=$(generate_password)
 FLARUM_DB_PW=$(generate_password)
 FLARUM_ADMIN_PW=$(generate_password)
 GHOST_DB_PW=$(generate_password)
-ZIPLINE_SECRET=$(generate_password)
-ZIPLINE_DB_PW=$(generate_password)
+BOOKSTACK_DB_PW=$(generate_password)
 MUMBLE_PW=$(generate_password)
 
 # Customize passwords for selected services
@@ -475,7 +474,7 @@ ADMIN_EMAIL=${ADMIN_EMAIL}
 STOAT_URL=${STOAT_URL}
 FORUM_URL=${FORUM_URL}
 GHOST_URL=${GHOST_URL}
-ZIPLINE_URL=${ZIPLINE_URL}
+BOOKSTACK_URL=${BOOKSTACK_URL}
 PASTE_URL=${PASTE_URL}
 ROOT_URL=${ROOT_URL}
 ROOT_TARGET=${ROOT_TARGET}
@@ -497,9 +496,10 @@ GHOST_DB_NAME=ghost
 GHOST_DB_USER=ghost
 GHOST_DB_PASSWORD=${GHOST_DB_PW}
 
-# Zipline
-ZIPLINE_CORE_SECRET=${ZIPLINE_SECRET}
-ZIPLINE_DB_PASSWORD=${ZIPLINE_DB_PW}
+# BookStack
+BOOKSTACK_DB_NAME=bookstack
+BOOKSTACK_DB_USER=bookstack
+BOOKSTACK_DB_PASSWORD=${BOOKSTACK_DB_PW}
 
 # Mumble
 MUMBLE_SUPERUSER_PASSWORD=${MUMBLE_PW}
@@ -517,6 +517,10 @@ GRANT ALL PRIVILEGES ON \`flarum\`.* TO 'flarum'@'%';
 CREATE DATABASE IF NOT EXISTS \`ghost\`;
 CREATE USER IF NOT EXISTS 'ghost'@'%' IDENTIFIED BY '${GHOST_DB_PW}';
 GRANT ALL PRIVILEGES ON \`ghost\`.* TO 'ghost'@'%';
+
+CREATE DATABASE IF NOT EXISTS \`bookstack\`;
+CREATE USER IF NOT EXISTS 'bookstack'@'%' IDENTIFIED BY '${BOOKSTACK_DB_PW}';
+GRANT ALL PRIVILEGES ON \`bookstack\`.* TO 'bookstack'@'%';
 
 FLUSH PRIVILEGES;
 EOF
@@ -572,7 +576,7 @@ CREDS_FILE="/root/evlbox-credentials.txt"
     echo "Chat:         https://${STOAT_URL}"
     [ -n "$FORUM_URL" ]   && has_profile "forum"        && echo "Forum:        https://${FORUM_URL}"
     [ -n "$GHOST_URL" ]   && has_profile "blog"         && echo "Blog:         https://${GHOST_URL}"
-    [ -n "$ZIPLINE_URL" ] && has_profile "screenshots"  && echo "Screenshots:  https://${ZIPLINE_URL}"
+    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && echo "Wiki:         https://${BOOKSTACK_URL}"
     [ -n "$PASTE_URL" ]   && has_profile "paste"        && echo "Paste:        https://${PASTE_URL}"
     has_profile "voice" && echo "Voice:        ${DOMAIN}:64738 (Mumble)"
     echo ""
@@ -581,7 +585,7 @@ CREDS_FILE="/root/evlbox-credentials.txt"
     [ -n "$FORUM_URL" ]   && has_profile "forum"        && echo "Flarum Admin: admin / ${FLARUM_ADMIN_PW}"
     has_profile "voice"   && echo "Mumble SuperUser: SuperUser / ${MUMBLE_PW}"
     [ -n "$GHOST_URL" ]   && has_profile "blog"         && echo "Ghost:        Set up at https://${GHOST_URL}/ghost"
-    [ -n "$ZIPLINE_URL" ] && has_profile "screenshots"  && echo "Zipline:      Set up at https://${ZIPLINE_URL}"
+    [ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && echo "BookStack:    https://${BOOKSTACK_URL} (default: admin@admin.com / password)"
     echo ""
     echo "--- Internal (do not share) ---"
     echo "MariaDB Root Password: ${MARIADB_ROOT_PW}"
@@ -613,7 +617,7 @@ SUMMARY+="Service URLs:\n"
 SUMMARY+="  Chat:         https://${STOAT_URL}\n"
 [ -n "$FORUM_URL" ]   && has_profile "forum"        && SUMMARY+="  Forum:        https://${FORUM_URL}\n"
 [ -n "$GHOST_URL" ]   && has_profile "blog"         && SUMMARY+="  Blog:         https://${GHOST_URL}\n"
-[ -n "$ZIPLINE_URL" ] && has_profile "screenshots"  && SUMMARY+="  Screenshots:  https://${ZIPLINE_URL}\n"
+[ -n "$BOOKSTACK_URL" ] && has_profile "wiki"  && SUMMARY+="  Wiki:         https://${BOOKSTACK_URL}\n"
 [ -n "$PASTE_URL" ]   && has_profile "paste"        && SUMMARY+="  Paste:        https://${PASTE_URL}\n"
 has_profile "voice" && SUMMARY+="  Voice:        ${DOMAIN}:64738 (Mumble)\n"
 SUMMARY+="\nCredentials saved to: /root/evlbox-credentials.txt\n"

@@ -89,12 +89,8 @@ if has_profile "blog"; then
     backup_volume "ghost_data" "ghost_data"
 fi
 
-if has_profile "screenshots"; then
-    backup_volume "zipline_data" "zipline_uploads"
-    next_step "Dumping Zipline PostgreSQL..."
-    docker compose -f "$STACK_DIR/compose.yml" exec -T zipline-db \
-        pg_dump -U zipline zipline \
-        > "$BACKUP_PATH/zipline-postgres.sql"
+if has_profile "wiki"; then
+    backup_volume "bookstack_data" "bookstack_data"
 fi
 
 if has_profile "paste"; then

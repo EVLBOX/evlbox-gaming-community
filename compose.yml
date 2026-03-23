@@ -4,7 +4,7 @@
 # Stoat (chat) runs as a separate compose project in /opt/evlbox/stoat.
 # Optional services use Docker Compose profiles — toggle via COMPOSE_PROFILES in .env.
 #
-# Profiles: forum, blog, screenshots, paste, voice
+# Profiles: forum, blog, wiki, paste, voice
 # Default: all enabled. Use setup.sh or `evlbox enable/disable <service>` to toggle.
 
 services:
@@ -62,6 +62,8 @@ services:
       - FLARUM_ADMIN_USER=${FLARUM_ADMIN_USER}
       - FLARUM_ADMIN_PASSWORD=${FLARUM_ADMIN_PASSWORD}
       - FLARUM_ADMIN_EMAIL=${FLARUM_ADMIN_EMAIL}
+      - REAL_IP_FROM=172.16.0.0/12
+      - REAL_IP_HEADER=X-Forwarded-For
     depends_on:
       - mariadb
 
@@ -85,34 +87,25 @@ services:
       - mariadb
 
   # ===========================================================================
-  # ZIPLINE — Image / Screenshot Hosting (profile: screenshots)
+  # BOOKSTACK — Wiki (profile: wiki)
   # ===========================================================================
-  zipline:
-    image: ghcr.io/diced/zipline:latest
+  bookstack:
+    image: lscr.io/linuxserver/bookstack:latest
     restart: unless-stopped
-    profiles: ["screenshots"]
+    profiles: ["wiki"]
     volumes:
-      - zipline_data:/zipline/uploads
+      - bookstack_data:/config
     environment:
-      - CORE_SECRET=${ZIPLINE_CORE_SECRET}
-      - CORE_HOSTNAME=0.0.0.0
-      - CORE_PORT=3000
-      - DATASOURCE_TYPE=local
-      - DATASOURCE_LOCAL_DIRECTORY=/zipline/uploads
-      - DATABASE_URL=postgresql://zipline:${ZIPLINE_DB_PASSWORD}@zipline-db:5432/zipline
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - APP_URL=https://${BOOKSTACK_URL}
+      - DB_HOST=mariadb
+      - DB_DATABASE=${BOOKSTACK_DB_NAME}
+      - DB_USERNAME=${BOOKSTACK_DB_USER}
+      - DB_PASSWORD=${BOOKSTACK_DB_PASSWORD}
     depends_on:
-      - zipline-db
-
-  zipline-db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    profiles: ["screenshots"]
-    volumes:
-      - zipline_db:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=zipline
-      - POSTGRES_PASSWORD=${ZIPLINE_DB_PASSWORD}
-      - POSTGRES_DB=zipline
+      - mariadb
 
   # ===========================================================================
   # PRIVATEBIN — Paste Service (profile: paste)
@@ -134,7 +127,7 @@ services:
   mariadb:
     image: mariadb:11
     restart: unless-stopped
-    profiles: ["forum", "blog"]
+    profiles: ["forum", "blog", "wiki"]
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./templates/initdb:/docker-entrypoint-initdb.d:ro
@@ -158,7 +151,6 @@ volumes:
   mumble_data:
   flarum_data:
   ghost_data:
-  zipline_data:
-  zipline_db:   # PostgreSQL data for Zipline
+  bookstack_data:
   privatebin_data:
   mariadb_data:

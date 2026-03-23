@@ -20,8 +20,8 @@
 # 	reverse_proxy flarum:8000
 # }
 #
-# img.myguild.com {
-# 	reverse_proxy zipline:3000
+# wiki.myguild.com {
+# 	reverse_proxy bookstack:6875
 # }
 #
 # paste.myguild.com {
@@ -39,7 +39,7 @@
 # App routing constraints:
 #   Stoat    — subdomain only (SPA with own API routes)
 #   Ghost    — subdomain only (subpath fragile/unsupported)
-#   Zipline  — subdomain only (no subpath config)
+#   BookStack — subdomain only (APP_URL must match)
 #   Flarum   — subdomain or subpath (FLARUM_BASE_URL supports it)
 #   PrivateBin — subdomain or subpath (BASEPATH config)
 #   Mumble   — not HTTP, always port 64738

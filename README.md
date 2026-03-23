@@ -2,7 +2,7 @@
 
 > **⚠️ Work in Progress.** This project is under active development and not yet production-ready. Use at your own risk. EVLBOX provides no warranty, support, or liability for damages arising from use of this software. See [LICENSE](LICENSE).
 
-Everything a gaming community needs — chat, voice, forums, image sharing — without Discord's ToS, data collection, or platform risk.
+Everything a gaming community needs — chat, voice, forums, wiki, and more — without Discord's ToS, data collection, or platform risk.
 
 Part of [EVLBOX Stacks](https://evlbox.com) — pre-configured, self-hosted server bundles.
 
@@ -21,7 +21,7 @@ Part of [EVLBOX Stacks](https://evlbox.com) — pre-configured, self-hosted serv
 |---|---|---|---|
 | [Flarum](https://flarum.org/) | Community forum | `forum.yourdomain.com` | `forum` |
 | [Mumble](https://www.mumble.info/) | Low-latency voice chat | `yourdomain.com:64738` | `voice` |
-| [Zipline](https://github.com/diced/zipline) | Screenshot & image hosting | `screenshots.yourdomain.com` | `screenshots` |
+| [BookStack](https://www.bookstackapp.com/) | Wiki — guild handbook, guides, strats | `wiki.yourdomain.com` | `wiki` |
 | [PrivateBin](https://privatebin.info/) | Encrypted paste service | `paste.yourdomain.com` | `paste` |
 | [Ghost](https://ghost.org/) | Blog / community news | `blog.yourdomain.com` | `blog` |
 
@@ -83,7 +83,7 @@ Backups protect against app-level mistakes. They do **not** protect against disk
 
 The setup wizard offers three domain configurations:
 
-- **Express** (recommended) — enter your domain, subdomains are auto-assigned (`chat.`, `forum.`, `img.`, `paste.`)
+- **Express** (recommended) — enter your domain, subdomains are auto-assigned (`chat.`, `forum.`, `wiki.`, `paste.`)
 - **Custom** — pick your own URLs per service (some apps require subdomains, some support subpaths)
 - **IP-only** — no domain needed, only Stoat runs with self-signed TLS. Add a domain later with `evlbox setup`
 

@@ -80,7 +80,7 @@ cd "$STOAT_DIR"
 docker compose pull
 
 cd "$STACK_DIR"
-COMPOSE_PROFILES=forum,voice,screenshots,paste,blog docker compose pull
+COMPOSE_PROFILES=forum,voice,wiki,paste,blog docker compose pull
 
 # -----------------------------------------------------------------------------
 # 5. Stack-specific firewall rules (evlbox-core handles SSH, HTTP, HTTPS)
