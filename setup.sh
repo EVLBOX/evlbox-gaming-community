@@ -780,13 +780,24 @@ docker compose up -d --quiet-pull 2>&1 | tail -1
 if [ "$RECONFIGURE" = false ] || is_new_profile "wiki"; then
     if has_profile "wiki" && [ -n "$BOOKSTACK_ADMIN_PW" ]; then
         echo "  Waiting for BookStack to initialize..."
+        # Wait for MariaDB to be accepting connections
         for i in $(seq 1 30); do
-            if docker compose exec -T bookstack php /app/www/artisan bookstack:create-admin \
-                --email="$ADMIN_EMAIL" --name="Admin" --password="$BOOKSTACK_ADMIN_PW" --initial \
-                2>/dev/null; then
-                break
-            fi
+            docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PW}" \
+                -e "SELECT 1" >/dev/null 2>&1 && break
             sleep 2
+        done
+        # Wait for BookStack's linuxserver init to create storage directories
+        for i in $(seq 1 60); do
+            docker compose exec -T bookstack test -d /app/www/storage/logs \
+                >/dev/null 2>&1 && break
+            sleep 2
+        done
+        # Now run artisan — retry up to 30x in case DB migrations are still running
+        for i in $(seq 1 30); do
+            docker compose exec -T bookstack php /app/www/artisan bookstack:create-admin \
+                --email="$ADMIN_EMAIL" --name="Admin" --password="$BOOKSTACK_ADMIN_PW" --initial \
+                >/dev/null 2>&1 && break
+            sleep 3
         done
     fi
 fi
