@@ -148,7 +148,7 @@ EOF
         cat >> "$caddyfile" << EOF
 
 ${BOOKSTACK_URL} {
-	reverse_proxy bookstack:6875
+	reverse_proxy bookstack:80
 }
 EOF
     fi
@@ -423,6 +423,7 @@ FLARUM_DB_PW=$(generate_password)
 FLARUM_ADMIN_PW=$(generate_password)
 GHOST_DB_PW=$(generate_password)
 BOOKSTACK_DB_PW=$(generate_password)
+BOOKSTACK_APP_KEY="base64:$(openssl rand -base64 32)"
 MUMBLE_PW=$(generate_password)
 
 # Customize passwords for selected services
@@ -497,6 +498,7 @@ GHOST_DB_USER=ghost
 GHOST_DB_PASSWORD=${GHOST_DB_PW}
 
 # BookStack
+BOOKSTACK_APP_KEY=${BOOKSTACK_APP_KEY}
 BOOKSTACK_DB_NAME=bookstack
 BOOKSTACK_DB_USER=bookstack
 BOOKSTACK_DB_PASSWORD=${BOOKSTACK_DB_PW}

@@ -99,6 +99,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=UTC
+      - APP_KEY=${BOOKSTACK_APP_KEY}
       - APP_URL=https://${BOOKSTACK_URL}
       - DB_HOST=mariadb
       - DB_DATABASE=${BOOKSTACK_DB_NAME}
